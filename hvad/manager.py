@@ -906,7 +906,9 @@ class TranslationAwareQueryset(QuerySet):
         return self._filter_extra(extra_filters).filter(*newargs, **newkwargs)
 
     def aggregate(self, *args, **kwargs):
-        raise NotImplementedError()
+        qs = self._clone()
+        response = super(TranslationAwareQueryset, qs).aggregate(*args, **kwargs)
+        return response
 
     def latest(self, field_name=None):
         extra_filters = Q()
