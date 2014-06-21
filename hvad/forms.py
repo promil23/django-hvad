@@ -219,7 +219,7 @@ def LanguageAwareCleanMixin(language):
 
 
 def translatable_modelform_factory(language, model, form=TranslatableModelForm,
-                                   fields=None, exclude=None,
+                                   fields=None, widgets=None, exclude=None,
                                    formfield_callback=None):
     # Create the inner Meta class. FIXME: ideally, we should be able to
     # construct a ModelForm without creating and passing in a temporary
@@ -232,6 +232,8 @@ def translatable_modelform_factory(language, model, form=TranslatableModelForm,
     if exclude is not None:
         attrs['exclude'] = exclude
 
+    if widgets is not None:
+        attrs['widgets'] = widgets
     # If parent form class already has an inner Meta, the Meta we're
     # creating needs to inherit from the parent's inner meta.
     parent = (object,)
@@ -253,12 +255,12 @@ def translatable_modelform_factory(language, model, form=TranslatableModelForm,
 def translatable_modelformset_factory(language, model, form=TranslatableModelForm, formfield_callback=None,
                          formset=BaseModelFormSet,
                          extra=1, can_delete=False, can_order=False,
-                         max_num=None, fields=None, exclude=None):
+                         max_num=None, fields=None, exclude=None, widgets=None):
     """
     Returns a FormSet class for the given Django model class.
     """
     form = translatable_modelform_factory(language, model, form=form, fields=fields, exclude=exclude,
-                             formfield_callback=formfield_callback)
+                             formfield_callback=formfield_callback, widgets=widgets)
     FormSet = formset_factory(form, formset, extra=extra, max_num=max_num,
                               can_order=can_order, can_delete=can_delete)
     FormSet.model = model
@@ -266,7 +268,7 @@ def translatable_modelformset_factory(language, model, form=TranslatableModelFor
 
 def translatable_inlineformset_factory(language, parent_model, model, form=TranslatableModelForm,
                           formset=BaseInlineFormSet, fk_name=None,
-                          fields=None, exclude=None,
+                          fields=None, widgets=None, exclude=None,
                           extra=3, can_order=False, can_delete=True, max_num=None,
                           formfield_callback=None):
     """
@@ -290,6 +292,7 @@ def translatable_inlineformset_factory(language, parent_model, model, form=Trans
         'fields': fields,
         'exclude': exclude,
         'max_num': max_num,
+        'widgets': widgets
     }
     FormSet = translatable_modelformset_factory(language, model, **kwargs)
     FormSet.fk = fk
