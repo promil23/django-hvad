@@ -38,7 +38,9 @@ Contents
 ***************
 
 .. toctree::
-    :maxdepth: 2
+    :maxdepth: 3
+    :titlesonly:
+    :numbered: 2
 
     public/installation
     public/quickstart
@@ -46,6 +48,7 @@ Contents
     public/queryset
     public/forms
     public/admin
+    public/faq
     public/release_notes
     public/contact
     public/contributing
