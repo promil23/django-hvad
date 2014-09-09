@@ -530,16 +530,35 @@ class TranslationQueryset(QuerySet):
                 params = dict([(k, v) for k, v in kwargs.items() if '__' not in k])
                 params.update(defaults)
                 # START PATCH
-                if 'language_code' not in params:
-                    params['language_code'] = self._language_code or get_language()
-                if params['language_code'] == 'all':
-                    raise ValueError('Cannot create an object with language \'all\'')
-                obj = self.shared_model(**params)
-                # END PATCH
+                shared_lookup, translated_lookup = self._split_kwargs(**params)
+                if 'language_code' not in kwargs:
+                    if self._language_code:
+                        params['language_code'] = self._language_code
+                    else:
+                        params['language_code'] = get_language()
+                        
+                    language_code = params['language_code']
+                else:        
+                    language_code = kwargs['language_code']
+                        
+                try:
+                    shared = self.shared_model.objects.get(**shared_lookup)
+                except self.shared_model.DoesNotExist:    
+                    obj = self.shared_model(**params)
+                    sid = transaction.savepoint(using=self.db)
+                    obj.save(force_insert=True, using=self.db)
+                    transaction.savepoint_commit(sid, using=self.db)
+                    return obj, True
+                
+                obj = shared.translate(language_code)
+                for key, value in translated_lookup.items():
+                    setattr(obj, key, value)
+                translated = getattr(obj, obj._meta.translations_cache)
                 sid = transaction.savepoint(using=self.db)
-                obj.save(force_insert=True, using=self.db)
+                translated.save()
                 transaction.savepoint_commit(sid, using=self.db)
                 return obj, True
+                # END PATCH
             except IntegrityError:
                 transaction.savepoint_rollback(sid, using=self.db)
                 exc_info = sys.exc_info()

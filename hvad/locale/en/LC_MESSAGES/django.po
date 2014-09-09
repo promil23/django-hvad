@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2012-11-10 01:57+0100\n"
+"POT-Creation-Date: 2014-08-26 20:34+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -17,37 +17,41 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: admin.py:92
+#: external/hvad/hvad/admin.py:101
 msgid "all translations"
 msgstr ""
 
-#: admin.py:252
+#: external/hvad/hvad/admin.py:287
 #, python-format
 msgid "The %(name)s \"%(obj)s\" was deleted successfully."
 msgstr ""
 
-#: admin.py:265
+#: external/hvad/hvad/admin.py:301
 #, python-format
 msgid "Cannot delete %(name)s"
 msgstr ""
 
-#: admin.py:267
+#: external/hvad/hvad/admin.py:303
 msgid "Are you sure?"
 msgstr ""
 
-#: templates/admin/hvad/change_form.html:37
-#: templates/admin/hvad/change_form.html:39
-#: templates/admin/hvad/deletion_not_allowed.html:10
-#: templates/admin/hvad/includes/translation_tabs.html:6
-#: templates/admin/hvad/includes/translation_tabs.html:8
+#: external/hvad/hvad/forms.py:348
+msgid "At least one translation must be provided"
+msgstr ""
+
+#: external/hvad/hvad/templates/admin/hvad/change_form.html:38
+#: external/hvad/hvad/templates/admin/hvad/change_form.html:40
+#: external/hvad/hvad/templates/admin/hvad/deletion_not_allowed.html:10
+#: external/hvad/hvad/templates/admin/hvad/includes/translation_tabs.html:6
+#: external/hvad/hvad/templates/admin/hvad/includes/translation_tabs.html:8
 msgid "Delete Translation"
 msgstr ""
 
-#: templates/admin/hvad/deletion_not_allowed.html:6
+#: external/hvad/hvad/templates/admin/hvad/deletion_not_allowed.html:6
 msgid "Home"
 msgstr ""
 
-#: templates/admin/hvad/deletion_not_allowed.html:15
+#: external/hvad/hvad/templates/admin/hvad/deletion_not_allowed.html:15
 #, python-format
 msgid ""
 "Deletion of the %(language_name)s translation of %(object_name)s "
@@ -55,22 +59,22 @@ msgid ""
 "translation of this instance."
 msgstr ""
 
-#: templates/admin/hvad/edit_inline/stacked.html:10
-#: templates/admin/hvad/edit_inline/tabular.html:30
+#: external/hvad/hvad/templates/admin/hvad/edit_inline/stacked.html:10
+#: external/hvad/hvad/templates/admin/hvad/edit_inline/tabular.html:30
 msgid "View on site"
 msgstr ""
 
-#: templates/admin/hvad/edit_inline/stacked.html:68
-#: templates/admin/hvad/edit_inline/tabular.html:115
+#: external/hvad/hvad/templates/admin/hvad/edit_inline/stacked.html:68
+#: external/hvad/hvad/templates/admin/hvad/edit_inline/tabular.html:115
 #, python-format
 msgid "Add another %(verbose_name)s"
 msgstr ""
 
-#: templates/admin/hvad/edit_inline/stacked.html:71
-#: templates/admin/hvad/edit_inline/tabular.html:118
+#: external/hvad/hvad/templates/admin/hvad/edit_inline/stacked.html:71
+#: external/hvad/hvad/templates/admin/hvad/edit_inline/tabular.html:118
 msgid "Remove"
 msgstr ""
 
-#: templates/admin/hvad/edit_inline/tabular.html:17
+#: external/hvad/hvad/templates/admin/hvad/edit_inline/tabular.html:17
 msgid "Delete?"
 msgstr ""
