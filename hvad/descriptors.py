@@ -68,8 +68,9 @@ class LanguageCodeAttribute(TranslatedAttribute):
         super(LanguageCodeAttribute, self).__init__(opts, 'language_code')
     
     def __set__(self, instance, value):
-        raise AttributeError("The 'language_code' attribute cannot be " +\
-                    "changed directly! Use the translate() method instead.")
+        super(LanguageCodeAttribute, self).__set__(instance, value)
+        #raise AttributeError("The 'language_code' attribute cannot be " +\
+        #            "changed directly! Use the translate() method instead.")
     
     def __delete__(self, instance):
         raise AttributeError("The 'language_code' attribute cannot be deleted!")
