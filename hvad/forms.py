@@ -156,7 +156,7 @@ class TranslatableModelForm(with_metaclass(TranslatableModelFormMetaclass, Model
                                                      error_class, label_suffix,
                                                      empty_permitted, instance)
 
-    def save(self, commit=True):
+    def save(self, is_edit=True, commit=True):
         if self.instance.pk is None:
             fail_message = 'created'
             new = True
@@ -171,14 +171,22 @@ class TranslatableModelForm(with_metaclass(TranslatableModelFormMetaclass, Model
 
         trans_model = self.instance._meta.translations_model
         language_code = self.cleaned_data.get('language_code', get_language())
+        #from portal.models import logger
+        #logger.debug('llllllllllll %s', str(type(self)))
+        if hasattr(self, 'is_edit'):
+            is_edit = self.is_edit
 
         if not new:
             trans = get_cached_translation(self.instance)
+            #logger.debug('llllllllllll %s %s %s', str(self.instance), language_code)
             if not trans or trans.language_code != language_code:
-                try:
-                    trans = get_translation(self.instance, language_code)
-                except trans_model.DoesNotExist:
-                    trans = trans_model()
+                if is_edit:
+                    trans = get_translation(self.instance, trans.language_code)
+                else:
+                    try:
+                        trans = get_translation(self.instance, language_code)
+                    except trans_model.DoesNotExist:
+                        trans = trans_model()
         else:
             trans = trans_model()
 
@@ -191,6 +199,7 @@ class TranslatableModelForm(with_metaclass(TranslatableModelFormMetaclass, Model
         return self.instance
         
     def _post_clean(self):
+        '''
         if self.instance.pk:
             try:
                 # Don't use self.instance.language_code here! That will fail if
@@ -198,11 +207,14 @@ class TranslatableModelForm(with_metaclass(TranslatableModelFormMetaclass, Model
                 # it succeeded, then the instance would already be translated,
                 # and there'd be no point combining it with the same
                 # translation again.
+                #trans = get_translation(self.instance, self.instance.language_code)
                 trans = get_translation(self.instance, self.language)
                 trans.master = self.instance
                 self.instance = combine(trans, self.Meta.model)
             except self.instance._meta.translations_model.DoesNotExist:
+                #self.instance = self.instance.translate(self.instance.language_code)
                 self.instance = self.instance.translate(self.language)
+        '''
         return super(TranslatableModelForm, self)._post_clean()
 
 
