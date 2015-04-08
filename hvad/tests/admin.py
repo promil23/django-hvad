@@ -5,14 +5,15 @@ from django.contrib import admin
 from django.contrib.auth.models import User
 from django.contrib.contenttypes.models import ContentType
 from django.core.urlresolvers import reverse
-from django.http import HttpResponseForbidden, HttpResponseRedirect
+from django.utils import translation
+from django.utils.http import urlencode
+from django.http import HttpResponseForbidden, HttpResponseRedirect, QueryDict
 from hvad.admin import InlineModelForm
 from hvad.admin import translatable_modelform_factory
+from hvad.compat import urlparse
 from hvad.forms import TranslatableModelForm
-from hvad.test_utils.context_managers import LanguageOverride
 from hvad.test_utils.fixtures import NormalFixture, SuperuserFixture
 from hvad.test_utils.data import NORMAL
-from hvad.test_utils.request_factory import RequestFactory
 from hvad.test_utils.testcase import HvadTestCase, minimumDjangoVersion
 from hvad.test_utils.project.app.models import Normal, SimpleRelated, AutoPopulated
 
@@ -38,7 +39,7 @@ class ModelHelpersTests(HvadTestCase, NormalFixture):
 
         # Translation getters should use the cached translation
         # regardless of current language settings
-        with LanguageOverride('ja'):
+        with translation.override('ja'):
             with self.assertNumQueries(0):
                 self.assertEqual(obj.safe_translation_getter('translated_field'),
                                  NORMAL[1].translated_field['en'])
@@ -48,7 +49,7 @@ class ModelHelpersTests(HvadTestCase, NormalFixture):
     def test_translation_getters_uncached(self):
         obj = Normal.objects.untranslated().get(pk=self.normal_id[1])
 
-        with LanguageOverride('ja'):
+        with translation.override('ja'):
             # Safe translation getter must not trigger a query
             with self.assertNumQueries(0):
                 self.assertEqual(obj.safe_translation_getter('translated_field'),
@@ -62,25 +63,24 @@ class ModelHelpersTests(HvadTestCase, NormalFixture):
                 self.assertEqual(obj.safe_translation_getter('translated_field'),
                                  NORMAL[1].translated_field['ja'])
 
-    @minimumDjangoVersion(1, 4)
     def test_translation_getters_missing(self):
         # Try when both current language and first fallbacks are missing
         obj = Normal.objects.untranslated().get(pk=self.normal_id[1])
-        with self.settings(LANGUAGE_CODE='xx',
-                           LANGUAGES=(('xx', 'Missing'),
+        with self.settings(LANGUAGE_CODE='tt',
+                           LANGUAGES=(('tt', 'Missing'),
                                       ('en', 'English'),
                                       ('ja', 'Japanese'))):
-            with LanguageOverride('zh'):
+            with translation.override('th'):
                 self.assertEqual(obj.lazy_translation_getter('translated_field'),
                                     NORMAL[1].translated_field['en'])
 
         # Now try with a different fallback priority
         obj = Normal.objects.untranslated().get(pk=self.normal_id[1])
-        with self.settings(LANGUAGE_CODE='xx',
-                           LANGUAGES=(('xx', 'Missing'),
+        with self.settings(LANGUAGE_CODE='tt',
+                           LANGUAGES=(('tt', 'Missing'),
                                       ('ja', 'Japanese'),
                                       ('en', 'English'))):
-            with LanguageOverride('zh'):
+            with translation.override('th'):
                 self.assertEqual(obj.lazy_translation_getter('translated_field'),
                                     NORMAL[1].translated_field['ja'])
 
@@ -98,7 +98,7 @@ class AdminMethodsTests(HvadTestCase, BaseAdminTests, NormalFixture):
         # Create a english translated model and make sure the active language
         # is highlighted in admin with <strong></strong>
         obj = Normal.objects.language("en").get(pk=self.normal_id[1])
-        with LanguageOverride('en'):
+        with translation.override('en'):
             # make sure no the call will not generate a spurious query in assertNumQueries
             ContentType.objects.get_for_model(Normal)
             with self.assertNumQueries(1):
@@ -107,7 +107,7 @@ class AdminMethodsTests(HvadTestCase, BaseAdminTests, NormalFixture):
                 # Entries should be linked to the corresponding translation page
                 self.assertTrue(myadmin.all_translations(obj).find("?language=en") != -1)
 
-        with LanguageOverride('zh'):
+        with translation.override('th'):
             with self.assertNumQueries(1):
                 self.assertTrue(myadmin.all_translations(obj).find("<strong>") == -1)
 
@@ -115,13 +115,12 @@ class AdminMethodsTests(HvadTestCase, BaseAdminTests, NormalFixture):
         obj = Normal()
         self.assertEqual(myadmin.all_translations(obj), "")
 
-    @minimumDjangoVersion(1, 4)
     def test_all_translations_prefetch_related(self):
         myadmin = self._get_admin(Normal)
 
         qs = Normal.objects.untranslated().prefetch_related('translations')
         obj = qs.get(pk=self.normal_id[1])
-        with LanguageOverride('en'):
+        with translation.override('en'):
             # make sure no the call will not generate a spurious query in assertNumQueries
             ContentType.objects.get_for_model(Normal)
             with self.assertNumQueries(0):
@@ -129,7 +128,7 @@ class AdminMethodsTests(HvadTestCase, BaseAdminTests, NormalFixture):
                 # Entries should be linked to the corresponding translation page
                 self.assertTrue(myadmin.all_translations(obj).find("?language=en") != -1)
 
-        with LanguageOverride('zh'):
+        with translation.override('th'):
             with self.assertNumQueries(0):
                 self.assertTrue(myadmin.all_translations(obj).find("<strong>") == -1)
 
@@ -142,11 +141,10 @@ class AdminMethodsTests(HvadTestCase, BaseAdminTests, NormalFixture):
     def test_get_object(self):
         # Check if it returns a model, if there is at least one translation
         myadmin = self._get_admin(Normal)
-        rf = RequestFactory()
-        get_request = rf.get('/admin/app/normal/')
+        get_request = self.request_factory.get('/admin/app/normal/')
 
         obj = Normal.objects.language("en").get(pk=self.normal_id[1])
-        with LanguageOverride('en'):
+        with translation.override('en'):
             self.assertEqual(myadmin.get_object(get_request, obj.pk).pk,
                              self.normal_id[1])
             self.assertEqual(myadmin.get_object(get_request, obj.pk).shared_field,
@@ -155,17 +153,17 @@ class AdminMethodsTests(HvadTestCase, BaseAdminTests, NormalFixture):
             self.assertEqual(myadmin.get_object(get_request, obj.pk).translated_field,
                              NORMAL[1].translated_field['en'])
 
-        with LanguageOverride('zh'):
+        with translation.override('th'):
             self.assertEqual(myadmin.get_object(get_request, obj.pk).pk,
                              self.normal_id[1])
             self.assertEqual(myadmin.get_object(get_request, obj.pk).shared_field,
                              NORMAL[1].shared_field)
-            self.assertEqual(myadmin.get_object(get_request, obj.pk).language_code, 'zh')
+            self.assertEqual(myadmin.get_object(get_request, obj.pk).language_code, 'th')
             self.assertEqual(myadmin.get_object(get_request, obj.pk).translated_field, '')
 
         # Check what happens if there is no translations at all
         obj = Normal.objects.untranslated().create(shared_field="shared")
-        with LanguageOverride('en'):
+        with translation.override('en'):
             self.assertEqual(myadmin.get_object(get_request, obj.pk).pk, obj.pk)
             self.assertEqual(myadmin.get_object(get_request, obj.pk).shared_field, obj.shared_field)
             self.assertEqual(myadmin.get_object(get_request, obj.pk).language_code, 'en')
@@ -174,15 +172,14 @@ class AdminMethodsTests(HvadTestCase, BaseAdminTests, NormalFixture):
     def test_get_object_nonexisting(self):
         # In case the object doesnt exist, it should return None
         myadmin = self._get_admin(Normal)
-        rf = RequestFactory()
-        get_request = rf.get('/admin/app/normal/')
+        get_request = self.request_factory.get('/admin/app/normal/')
         self.assertEqual(myadmin.get_object(get_request, -1), None)
 
 class NormalAdminTests(HvadTestCase, BaseAdminTests, SuperuserFixture, NormalFixture):
     normal_count = 1
 
     def test_admin_simple(self):
-        with LanguageOverride('en'):
+        with translation.override('en'):
             with self.login_user_context(username='admin', password='admin'):
                 SHARED = 'shared_new'
                 TRANS = 'trans_new'
@@ -208,7 +205,7 @@ class NormalAdminTests(HvadTestCase, BaseAdminTests, SuperuserFixture, NormalFix
         translated field during the initial save(), and it crashes.
         """
 
-        with LanguageOverride('en'):
+        with translation.override('en'):
             with self.login_user_context(username='admin', password='admin'):
                 danish_string = u"rød grød med fløde"
                 url = reverse('admin:app_autopopulated_add')
@@ -223,7 +220,7 @@ class NormalAdminTests(HvadTestCase, BaseAdminTests, SuperuserFixture, NormalFix
                 self.assertEqual(obj.slug, "rd-grd-med-flde")
 
     def test_admin_change_form_title(self):
-        with LanguageOverride('en'):
+        with translation.override('en'):
             with self.login_user_context(username='admin', password='admin'):
                 url = reverse('admin:app_normal_change', args=(self.normal_id[1],))
                 response = self.client.get(url)
@@ -231,22 +228,47 @@ class NormalAdminTests(HvadTestCase, BaseAdminTests, SuperuserFixture, NormalFix
                 self.assertTrue('en' in response.content.decode('utf-8'))
 
     def test_admin_change_form_language_tabs_urls(self):
-        with LanguageOverride('en'):
+        with translation.override('en'):
             with self.login_user_context(username='admin', password='admin'):
                 get_url = reverse('admin:app_normal_change', args=(self.normal_id[1],))
-                response = self.client.get(get_url)
-                self.assertEqual(response.status_code, 200)
-                tabs = response.context['language_tabs']
+                test_urls = [
+                    '%s?%s' % (get_url, '_changelist_filters=q%3Dsearchparam'),
+                    '%s?%s' % (get_url, '_changelist_filters=q%3Dsearchparam&language=fr'),
+                ]
 
-                from hvad.compat.urls import urlencode
-                for actual_tab_url, name, key, status in tabs:
-                    expected_tab_url = '%s?%s' % (get_url,
-                        urlencode({'language': key}))
-                    self.assertEqual(expected_tab_url, actual_tab_url)
+                for test_url in test_urls:
+                    response = self.client.get(test_url)
+                    self.assertEqual(response.status_code, 200)
+                    tabs = response.context['language_tabs']
+
+                    expected_querydict = QueryDict(urlparse(test_url).query, mutable=True)
+
+                    for actual_tab_url, name, key, status in tabs:
+                        expected_querydict['language'] = key
+                        actual_querydict = QueryDict(urlparse(actual_tab_url).query)
+                        self.assertEqual(expected_querydict, actual_querydict)
+
+    def test_admin_change_form_action_url(self):
+        with translation.override('en'):
+            with self.login_user_context(username='admin', password='admin'):
+                url = reverse('admin:app_normal_change', args=(self.normal_id[1],))
+                tests = (
+                    '',
+                    'language=fr',
+                    '_changelist_filters=q%3Dparam&language=fr',
+                )
+                for query_string in tests:
+                    expected_dict = QueryDict(query_string)
+                    full_url = '%s?%s' % (url, query_string) if query_string else url
+                    response = self.client.get(full_url)
+                    form_url = urlparse(response.context['form_url'])
+                    self.assertEqual(expected_dict, QueryDict(form_url.query),
+                                     'query_string=%r' % query_string)
+
 
     def test_admin_change_form_redirect_add_another(self):
         lang = 'en'
-        with LanguageOverride('ja'):
+        with translation.override('ja'):
             with self.login_user_context(username='admin', password='admin'):
                 url = '%s?language=%s' % (reverse('admin:app_normal_change',
                                                   args=(self.normal_id[1],)), lang)
@@ -269,7 +291,7 @@ class NormalAdminTests(HvadTestCase, BaseAdminTests, SuperuserFixture, NormalFix
     
     def test_admin_change_form_redirect_continue_edit(self):
         lang = 'en'
-        with LanguageOverride('ja'):
+        with translation.override('ja'):
             with self.login_user_context(username='admin', password='admin'):
                 url = '%s?language=%s' % (reverse('admin:app_normal_change',
                                                   args=(self.normal_id[1],)), lang)
@@ -305,7 +327,7 @@ class NormalAdminTests(HvadTestCase, BaseAdminTests, SuperuserFixture, NormalFix
 
     def test_admin_change_form(self):
         lang = 'en'
-        with LanguageOverride(lang):
+        with translation.override(lang):
             with self.login_user_context(username='admin', password='admin'):
                 url = reverse('admin:app_normal_change', args=(self.normal_id[1],))
                 data = {
@@ -342,14 +364,14 @@ class NormalAdminTests(HvadTestCase, BaseAdminTests, SuperuserFixture, NormalFix
                 'simplerel-INITIAL_FORMS': '0',
                 'simplerel-MAX_NUM_FORMS': '0',
             }
-            with LanguageOverride('en'):
+            with translation.override('en'):
                 response = self.client.post(url, data_en)
                 self.assertEqual(response.status_code, 302)
-                self.assertEqual(Normal.objects.count(), self.normal_count + 1)
-            with LanguageOverride('ja'):
+                self.assertEqual(Normal.objects.untranslated().count(), self.normal_count + 1)
+            with translation.override('ja'):
                 response = self.client.post(url, data_ja)
                 self.assertEqual(response.status_code, 302)
-                self.assertEqual(Normal.objects.count(), self.normal_count + 2)
+                self.assertEqual(Normal.objects.untranslated().count(), self.normal_count + 2)
             en = Normal.objects.language('en').get(shared_field=SHARED)
             self.assertEqual(en.shared_field, SHARED)
             self.assertEqual(en.translated_field, TRANS_EN)
@@ -358,7 +380,7 @@ class NormalAdminTests(HvadTestCase, BaseAdminTests, SuperuserFixture, NormalFix
             self.assertEqual(ja.translated_field, TRANS_JA)
 
     def test_admin_with_param(self):
-        with LanguageOverride('ja'):
+        with translation.override('ja'):
             with self.login_user_context(username='admin', password='admin'):
                 SHARED = 'shared_new'
                 TRANS = 'trans'
@@ -372,7 +394,7 @@ class NormalAdminTests(HvadTestCase, BaseAdminTests, SuperuserFixture, NormalFix
                 }
                 response = self.client.post("%s?language=en" % url, data)
                 self.assertEqual(response.status_code, 302)
-                self.assertEqual(Normal.objects.count(), self.normal_count + 1)
+                self.assertEqual(Normal.objects.untranslated().count(), self.normal_count + 1)
                 obj = Normal.objects.language('en').get(shared_field=SHARED)
                 self.assertEqual(obj.shared_field, SHARED)
                 self.assertEqual(obj.translated_field, TRANS)
@@ -385,7 +407,7 @@ class AdminEditTests(HvadTestCase, BaseAdminTests, NormalFixture, SuperuserFixtu
         url = reverse('admin:app_normal_changelist')
         request = self.request_factory.get(url)
         normaladmin = self._get_admin(Normal)
-        with LanguageOverride('en'):
+        with translation.override('en'):
             if django.VERSION >= (1, 6):
                 queryset = normaladmin.get_queryset(request)
             else:
@@ -464,22 +486,27 @@ class AdminNoFixturesTests(HvadTestCase, BaseAdminTests):
                 self.assertEqual(status, 'available')
                 
         with self.assertNumQueries(0):
-            with LanguageOverride('en'):
+            with translation.override('en'):
                 normaladmin.get_language_tabs(request, [])
 
     def test_get_change_form_base_template(self):
         normaladmin = self._get_admin(Normal)
         template = normaladmin.get_change_form_base_template()
-        self.assertEqual(template, 'admin/change_form.html')
+
+        #HACK navigate through incompatibility between django template engine
+        # deprecation path and django extends tag in version 1.8
+        if hasattr(template, 'template'):
+            template = template.template
+        self.assertEqual(template.name, 'admin/change_form.html')
         
     def test_translatable_modelform_factory(self):
         t = translatable_modelform_factory('en', Normal, fields=['shared_field'], exclude=['id'])
         self.assertEqual(t.Meta.fields, ['shared_field'])
-        self.assertEqual(t.Meta.exclude, ['id', 'language_code'])
+        self.assertEqual(t.Meta.exclude, ['id', 'language_code', 'translations'])
         
         t = translatable_modelform_factory('en', Normal, fields=['shared_field'], exclude=['id'])
         self.assertEqual(t.Meta.fields, ['shared_field'])
-        self.assertEqual(t.Meta.exclude, ['id', 'language_code'])
+        self.assertEqual(t.Meta.exclude, ['id', 'language_code', 'translations'])
         
         class TestForm(TranslatableModelForm):
             class Meta:
@@ -488,7 +515,7 @@ class AdminNoFixturesTests(HvadTestCase, BaseAdminTests):
                
         t = translatable_modelform_factory('en', Normal, form=TestForm)
         self.assertEqual(t.Meta.fields, ['shared_field'])
-        self.assertEqual(t.Meta.exclude, ['id', 'language_code'])
+        self.assertEqual(t.Meta.exclude, ['id', 'language_code', 'translations'])
         
 
 class AdminRelationTests(HvadTestCase, BaseAdminTests, SuperuserFixture, NormalFixture):
@@ -497,7 +524,7 @@ class AdminRelationTests(HvadTestCase, BaseAdminTests, SuperuserFixture, NormalF
     def test_adding_related_object(self):
         url = reverse('admin:app_simplerelated_add')
         TRANS_FIELD = "English Content" 
-        with LanguageOverride('en'):
+        with translation.override('en'):
             en = Normal.objects.get(pk=self.normal_id[1])
             with self.login_user_context(username='admin', password='admin'):
                 data = {
@@ -515,7 +542,6 @@ class AdminRelationTests(HvadTestCase, BaseAdminTests, SuperuserFixture, NormalF
                 self.assertRedirects(response, expected_url)
 
 
-@minimumDjangoVersion(1, 4)
 class TranslatableInlineAdminTests(HvadTestCase, BaseAdminTests, SuperuserFixture):
     def test_correct_id_in_inline(self):
         LANGUAGES = (
@@ -525,7 +551,7 @@ class TranslatableInlineAdminTests(HvadTestCase, BaseAdminTests, SuperuserFixtur
             ('ja', u'日本語'),
         )
         with self.settings(LANGUAGES=LANGUAGES):
-            with LanguageOverride('en'):
+            with translation.override('en'):
                 normal = Normal.objects.language().create(
                     shared_field="whatever1",
                     translated_field="whatever in another language1"
@@ -556,7 +582,7 @@ class TranslatableInlineAdminTests(HvadTestCase, BaseAdminTests, SuperuserFixtur
             simple1.save()
 
 
-            with LanguageOverride('da'):
+            with translation.override('da'):
                 instance = SimpleRelated.objects.get(pk=simple1.pk)
                 class ExampleInlineForm(InlineModelForm):
                     class Meta:

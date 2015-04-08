@@ -108,6 +108,22 @@ TranslationQueryset
         - ``'all'``: no language filtering will be applied, a copy of an instance
           will be returned for every translation that matched the query.
 
+    .. attribute:: _language_fallbacks
+
+        A tuple of fallbacks used for this queryset, if fallbacks have been
+        activated by :meth:`fallbacks`, or `None` otherwise.
+
+        A ``None`` value in the tuple will be replaced with current language
+        at query evaluation.
+
+    .. attribute:: _hvad_switch_fields
+
+        A tuple of attributes to move from the :term:`Translations Model` to the
+        :term:`Shared Model` instance before returning objects to the caller. It
+        is mostly used by :meth:`~django.db.models.query.QuerySet.extra` so
+        additional values collected by the ``select`` argument are available on
+        the final instance.
+
     .. attribute:: translations_manager
     
         The (real) manager of the :term:`Translations Model`.
@@ -192,7 +208,7 @@ TranslationQueryset
 
         Apply the language filter to current query. Language is retrieved from
         :attr:`_language_code`, or :func:`~django.utils.translation.get_language` if
-        None.
+        None. If :meth:`fallbacks` have been set, apply the additional join as well.
 
         Special value ``'all'`` will prevent any language filter from being applied,
         resulting in the query considering all translations, possibly returning
@@ -234,6 +250,32 @@ TranslationQueryset
         .. note:: Using ``language('all')`` and :meth:`select_related` on the
                   same queryset is not supported and will raise a
                   :exc:`~exceptions.NotImplementedError`.
+
+    .. method:: fallbacks(self, *languages)
+
+        .. versionadded:: 0.6
+
+        Activates fallbacks for this queryset. This sets the
+        :attr:`_language_fallbacks` attribute, but does not apply any join
+        or filtering until :meth:`_add_language_filter` is called. This allows
+        for query-time resolution of the ``None`` values in the list.
+
+        The following special cases are accepted:
+
+        - ``None`` as a single argument will disable fallbacks on the queryset.
+        - An empty argument list will use :setting:`LANGUAGES` setting as a
+          fallback list.
+        - A ``None`` value a language will be replaced by the current language
+          at query evalution time, by calling
+          :func:`~django.utils.translation.get_language`
+
+        Returns a queryset.
+
+        .. note:: Using ``fallbacks`` and :meth:`select_related` on the
+                  same queryset is not supported and will raise a
+                  :exc:`~exceptions.NotImplementedError`.
+
+        .. note:: This feature requires Django 1.6 or newer.
 
     .. method:: create(self, **kwargs)
     
@@ -500,6 +542,20 @@ FallbackQueryset
     A queryset that can optionally use fallbacks and by default only fetches the
     :term:`Shared Model`.
 
+    There are actually two underlying implementations, the ``LegacyFallbackQueryset``
+    and the ``SelfJoinFallbackQueryset``. Implementation is chosen at initialization
+    based on the ``HVAD_LEGACY_FALLBACKS`` setting. It defaults to ``False``
+    (use SelfJoin) on Django 1.6 and newer, and ``True`` (use Legacy) on older
+    versions.
+
+    The ``LegacyFallbackQueryset`` generates lots of queries as it walks through
+    batches of models, fetches their translations and matches them onto the models.
+
+    The ``SelfJoinFallbackQueryset`` uses a single self outer join to achieve the same
+    result in only one (complex) query. Performance is good as the number of items
+    per model in the cross-product is limited to the number of languages that
+    Django supports. Implementation digs deeper into Django internals, though.
+
     .. attribute:: _translation_fallbacks
     
         List of fallbacks to use (or ``None``).
@@ -527,26 +583,6 @@ FallbackQueryset
     .. method:: _clone(self, klass=None, setup=False, **kwargs)
     
         Injects *translation_fallbacks* into *kwargs* and calls the superclass.
-
-
-**************************
-TranslationFallbackManager
-**************************
-
-.. warning:: This class is deprecated and will be removed in next release.
-                Please use :meth:`~hvad.manager.TranslationManager.untranslated`
-                instead.
-
-.. class:: TranslationFallbackManager
-
-    .. method:: use_fallbacks(self, *fallbacks)
-    
-        Proxies to :meth:`FallbackQueryset.use_fallbacks` by calling
-        :meth:`get_queryset` first.
-
-    .. method:: get_queryset(self)
-    
-        Returns an instance of :class:`FallbackQueryset` for this manager.
 
 
 ************************
@@ -700,7 +736,9 @@ TranslationAwareQueryset
         object provided in *extra_filters* and returns a queryset from the
         superclass, so that the methods that call this method can directely
         access methods on the superclass to reduce boilerplate code.
-    
+
+        .. warning:: This internal method returns a ``super()`` proxy object,
+                     be sure to understand the implications before using it.
     
 ***********************
 TranslationAwareManager

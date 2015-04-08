@@ -9,29 +9,26 @@ About this project
 django-hvad provides a high level API to maintain multilingual content in your
 database using the Django ORM.
 
-*************************
-Before you dive into this
-*************************
-
-Please note that this documentation assumes that you are very familiar with 
+Please note that this documentation assumes that you are familiar with
 Django and Python, if you are not, please familiarize yourself with those first.
-
-While django-hvad tries to be as simple to use as possible, it's still
-recommended that you only use it if you consider yourself to be very strong in
-Python and Django.
 
 ************************
 Notes on Django versions
 ************************
 
-django-hvad is tested on the following configurations:
+The guideline is hvad supports all Django versions that are supported by the
+Django team. This holds true for Long-Term Support releases as well. Support for
+new versions will usually be introduced when they reach the beta stage.
 
-- Django 1.3.7, running Python 2.6 or 2.7.
-- Django 1.4.12, running Python 2.6 or 2.7.
-- Django 1.5.7, running Python 2.6, 2.7 or 3.3.
-- Django 1.6.4, running Python 2.7 or 3.3.
-- Django 1.7.0, running Python 2.7, 3.3 or 3.4.
+Thus, django-hvad 1.2 is tested on the following configurations:
 
+- Django 1.4.19, running Python 2.7.
+- Django 1.5.12, running Python 2.7 or 3.3.
+- Django 1.6.10, running Python 2.7 or 3.3.
+- Django 1.7.4, running Python 2.7, 3.3 or 3.4.
+- Django 1.8.0, running Python 2.7, 3.3 or 3.4.
+
+All tests are run against MySQL and PostgreSQL.
 
 ***************
 Contents
@@ -48,6 +45,7 @@ Contents
     public/queryset
     public/forms
     public/admin
+    public/restframework
     public/faq
     public/release_notes
     public/contact

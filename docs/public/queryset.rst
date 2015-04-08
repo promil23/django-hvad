@@ -49,6 +49,33 @@ language
     This filters out all instances that are not translated in the given language,
     and makes translatable fields available on the query results.
 
+fallbacks
+---------
+
+.. _fallbacks-public:
+
+.. method:: fallbacks(*languages)
+
+    .. versionadded:: 0.6
+
+    Enables fallbacks on the queryset. When the queryset has fallbacks enabled,
+    it will try to use fallback languages if an object has not translation
+    available in the language given to :ref:`language() <language-public>`.
+
+    The `languages` arguments specified the languages to use, priorized from
+    first to last. Special value `None` will be replaced with current language
+    as returned by :func:`~django.utils.translation.get_language`. If called
+    with an empty argument list, the :setting:`LANGUAGES` setting will be used.
+
+    If an instance has no translation in the
+    :ref:`language() <language-public>`-specified language,
+    nor in any of the languages given to ``fallbacks()``, an arbitrary
+    translation will be picked.
+
+    Passing the single value ``None`` alone will disable fallbacks.
+
+    .. note:: This feature requires Django 1.6 or newer.
+
 delete_translations
 -------------------
 
@@ -82,7 +109,6 @@ not implemented (yet) in django-hvad:
 * :meth:`~hvad.manager.TranslationQueryset.bulk_create`
 * :meth:`~hvad.manager.TranslationQueryset.update_or_create`
 * :meth:`~hvad.manager.TranslationQueryset.complex_filter`
-* :meth:`~hvad.manager.TranslationQueryset.annotate`
 * :meth:`~hvad.manager.TranslationQueryset.defer`
 * :meth:`~hvad.manager.TranslationQueryset.only`
 

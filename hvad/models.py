@@ -1,3 +1,4 @@
+import django
 from django.core.exceptions import ImproperlyConfigured
 from django.conf import settings
 from django.db import models
@@ -8,9 +9,9 @@ from django.db.models.signals import post_save, class_prepared
 from django.utils.translation import get_language
 from hvad.descriptors import LanguageCodeAttribute, TranslatedAttribute
 from hvad.manager import TranslationManager, TranslationsModelManager
-from hvad.utils import SmartGetFieldByName
-from hvad.compat.method_type import MethodType
-from hvad.compat.settings import settings_updater
+from hvad.utils import (get_cached_translation, set_cached_translation,
+                        SmartGetFieldByName, SmartGetField, settings_updater)
+from hvad.compat import MethodType
 import sys
 import warnings
 
@@ -21,16 +22,35 @@ import warnings
 def update_settings(*args, **kwargs):
     global FALLBACK_LANGUAGES, TABLE_NAME_SEPARATOR
     FALLBACK_LANGUAGES = tuple( code for code, name in settings.LANGUAGES )
-    try:
-        TABLE_NAME_SEPARATOR = getattr(settings, 'NANI_TABLE_NAME_SEPARATOR')
-    except AttributeError:
-        TABLE_NAME_SEPARATOR = getattr(settings, 'HVAD_TABLE_NAME_SEPARATOR', '_')
-    else:
-        warnings.warn('NANI_TABLE_NAME_SEPARATOR setting is deprecated and will '
-                      'be removed. Please rename it to HVAD_TABLE_NAME_SEPARATOR.',
-                      DeprecationWarning)
+    TABLE_NAME_SEPARATOR = getattr(settings, 'HVAD_TABLE_NAME_SEPARATOR', '_')
+
+    if hasattr(settings, 'NANI_TABLE_NAME_SEPARATOR'):
+        # remove in 1.3
+        raise ImproperlyConfigured(
+            'NANI_TABLE_NAME_SEPARATOR setting is obsolete and has been '
+            'removed. Please rename it to HVAD_TABLE_NAME_SEPARATOR.')
+
 
 #===============================================================================
+
+def _split_together(constraints, fields, meta, name):
+    sconst, tconst = [], []
+    if name in meta:
+        # raise in 1.3, remove in 1.5
+        warnings.warn('Passing \'%s\' to TranslatedFields is deprecated. Please use '
+                      'Please Meta.%s instead.' % (name, name), DeprecationWarning)
+        tconst.extend(meta[name])
+
+    for constraint in constraints:
+        if all(item in fields for item in constraint):
+            tconst.append(constraint)
+        elif not any(item in fields for item in constraint):
+            sconst.append(constraint)
+        else:
+            raise ImproperlyConfigured(
+                'Constraints in Meta.%s cannot mix translated and '
+                'untranslated fields, such as %r.' % (name, constraint))
+    return sconst, tconst
 
 def create_translations_model(model, related_name, meta, **fields):
     """
@@ -49,7 +69,6 @@ def create_translations_model(model, related_name, meta, **fields):
     Those two fields are unique together, this get's enforced in the inner Meta
     class of the translations table
     """
-    meta = meta or {}
 
     # Build a list of translation models from base classes. Depth-first scan.
     abstract = model._meta.abstract
@@ -68,7 +87,24 @@ def create_translations_model(model, related_name, meta, **fields):
     translation_bases.append(BaseTranslationModel)
 
     # Create translation model Meta
+    meta = meta or {}
     meta['abstract'] = abstract
+    meta['db_tablespace'] = model._meta.db_tablespace
+    meta['managed'] = model._meta.managed
+    if model._meta.order_with_respect_to in fields:
+        raise ImproperlyConfigured(
+            'Using a translated fields in %s.Meta.order_with_respect_to is ambiguous '
+            'and hvad does not support it.' %
+            model._meta.model_name if django.VERSION >= (1, 6) else model._meta.module_name)
+
+    sconst, tconst = _split_together(model._meta.unique_together, fields, meta, 'unique_together')
+    model._meta.unique_together = tuple(sconst)
+    meta['unique_together'] = tuple(tconst)
+    if django.VERSION >= (1, 5):
+        sconst, tconst = _split_together(model._meta.index_together, fields, meta, 'index_together')
+        model._meta.index_together = tuple(sconst)
+        meta['index_together'] = tuple(tconst)
+
     if not abstract:
         unique = [('language_code', 'master')]
         meta['unique_together'] = list(meta.get('unique_together', [])) + unique
@@ -141,12 +177,12 @@ class BaseTranslationModel(models.Model):
 
 class TranslatableModelBase(ModelBase):
     def __new__(cls, *args, **kwargs):
-        warnings.warn('TranslatableModelBase metaclass is deprecated and will '
-            'be removed. Hvad no longer uses a custom metaclass so conflict '
+        # remove in 1.3
+        raise RuntimeError(
+            'TranslatableModelBase metaclass is no longer used and has been '
+            'removed. Hvad no longer uses a custom metaclass so conflict '
             'resolution is no longer required, TranslatableModelBase can be '
-            'dropped.',
-            DeprecationWarning)
-        return ModelBase.__new__(cls, *args, **kwargs)
+            'dropped.')
 
 
 class NoTranslation(object):
@@ -159,78 +195,48 @@ class TranslatableModel(models.Model):
     """
     # change the default manager to the translation manager
     objects = TranslationManager()
-    
+
     class Meta:
         abstract = True
-    
+
     def __init__(self, *args, **kwargs):
-        tkwargs = {} # translated fields
-        skwargs = {} # shared fields
-        
-        if 'master' in kwargs.keys():
-            raise RuntimeError(
-                    "Cannot init  %s class with a 'master' argument" % \
-                    self.__class__.__name__
-            )
-        
-        # filter out all the translated fields (including 'master' and 'language_code')
-        primary_key_names = ('pk', self._meta.pk.name)
-        for key in list(kwargs.keys()):
-            if key in self._translated_field_names:
-                if not key in primary_key_names:
-                    # we exclude the pk of the shared model
-                    tkwargs[key] = kwargs.pop(key)
-        if not tkwargs.keys():
-            # if there where no translated options, then we assume this is a
-            # regular init and don't want to do any funky stuff
-            super(TranslatableModel, self).__init__(*args, **kwargs)
-            return
-        
-        # there was at least one of the translated fields (or a language_code) 
-        # in kwargs. We need to do magic.
-        # extract all the shared fields (including the pk)
-        for key in list(kwargs.keys()):
-            if key in self._shared_field_names:
-                skwargs[key] = kwargs.pop(key)
-        # do the regular init minus the translated fields
+        # Split arguments into shared/translatd
+        veto_names = ('pk', 'master', 'master_id', self._meta.translations_model._meta.pk.name)
+        skwargs, tkwargs = {}, {}
+        for key, value in kwargs.items():
+            if key in self._translated_field_names and not key in veto_names:
+                tkwargs[key] = value
+            else:
+                skwargs[key] = value
+
         super(TranslatableModel, self).__init__(*args, **skwargs)
-        # prepopulate the translations model cache with an translation model
-        tkwargs['language_code'] = tkwargs.get('language_code', get_language())
-        tkwargs['master'] = self
-        translated = self._meta.translations_model(*args, **tkwargs)
-        setattr(self, self._meta.translations_cache, translated)
+
+        # Create a translation if there are translated fields
+        if tkwargs:
+            tkwargs['language_code'] = tkwargs.get('language_code') or get_language()
+            set_cached_translation(self, self._meta.translations_model(**tkwargs))
 
     @classmethod
     def save_translations(cls, instance, **kwargs):
-        """
-        When this instance is saved, also save the (cached) translation
-        """
-        opts = cls._meta
-        if hasattr(instance, opts.translations_cache):
-            trans = getattr(instance, opts.translations_cache)
-            if not trans.master_id:
-                trans.master = instance
-            trans.save()
-    
+        'Signal handler for post_save'
+        translation = get_cached_translation(instance)
+        if translation is not None:
+            translation.master = instance
+            translation.save()
+
     def translate(self, language_code):
-        """
-        Returns an Model instance in the specified language.
-        Does NOT check if the translation already exists!
-        Does NOT interact with the database.
-        
-        This will refresh the translations cache attribute on the instance.
-        """
-        tkwargs = {
-            'language_code': language_code,
-            'master': self,
-        }
-        translated = self._meta.translations_model(**tkwargs)
-        setattr(self, self._meta.translations_cache, translated)
+        ''' Create a new translation for current instance.
+            Does NOT check if the translation already exists!
+        '''
+        set_cached_translation(
+            self,
+            self._meta.translations_model(language_code=language_code)
+        )
         return self
-    
+
     def safe_translation_getter(self, name, default=None):
-        cache = getattr(self, self._meta.translations_cache, None)
-        if not cache:
+        cache = get_cached_translation(self)
+        if cache is None:
             return default
         return getattr(cache, name, default)
 
@@ -264,7 +270,7 @@ class TranslatableModel(models.Model):
             # none of the fallbacks was found, pick an arbitrary translation
             translation = translation_dict.popitem()[1]
 
-        setattr(self, self._meta.translations_cache, translation)
+        set_cached_translation(self, translation)
         return getattr(translation, name, default)
 
     def get_available_languages(self):
@@ -279,35 +285,30 @@ class TranslatableModel(models.Model):
     #===========================================================================
     
     @property
-    def _shared_field_names(self):
-        if getattr(self, '_shared_field_names_cache', None) is None:
-            opts = self._meta
-            self._shared_field_names_cache = opts.get_all_field_names()
-            for name in tuple(self._shared_field_names_cache):
-                try:
-                    attname = opts.get_field(name).get_attname()
-                except FieldDoesNotExist:
-                    pass
-                else:
-                    if attname and attname != name:
-                        self._shared_field_names_cache.append(attname)
-        return self._shared_field_names_cache
-    @property
     def _translated_field_names(self):
         if getattr(self, '_translated_field_names_cache', None) is None:
             opts = self._meta.translations_model._meta
-            self._translated_field_names_cache = opts.get_all_field_names()
-            for name in tuple(self._translated_field_names_cache):
-                try:
-                    attname = opts.get_field(name).get_attname()
-                except FieldDoesNotExist:
-                    pass
-                else:
-                    if attname and attname != name:
-                        self._translated_field_names_cache.append(attname)
+            result = set()
+
+            if django.VERSION >= (1, 8):
+                for field in opts.get_fields():
+                    result.add(field.name)
+                    if hasattr(field, 'attname'):
+                        result.add(field.attname)
+            else:
+                result = set(opts.get_all_field_names())
+                for name in tuple(result):
+                    try:
+                        attname = opts.get_field(name).get_attname()
+                    except (FieldDoesNotExist, AttributeError):
+                        continue
+                    if attname:
+                        result.add(attname)
+
+            self._translated_field_names_cache = tuple(result)
         return self._translated_field_names_cache
 
-
+#=============================================================================
 
 def contribute_translations(cls, rel):
     """
@@ -318,16 +319,15 @@ def contribute_translations(cls, rel):
     """
     opts = cls._meta
     opts.translations_accessor = rel.get_accessor_name()
-    opts.translations_model = rel.model
+    if django.VERSION >= (1, 8):
+        opts.translations_model = rel.field.model
+    else:
+        opts.translations_model = rel.model
     opts.translations_cache = '%s_cache' % rel.get_accessor_name()
     trans_opts = opts.translations_model._meta
 
     # Set descriptors
-    ignore_fields = [
-        'pk',
-        'master',
-        opts.translations_model._meta.pk.name,
-    ]
+    ignore_fields = ('pk', 'master', 'master_id', opts.translations_model._meta.pk.name)
     for field in trans_opts.fields:
         if field.name in ignore_fields:
             continue
@@ -352,31 +352,26 @@ def prepare_translatable_model(sender, **kwargs):
             "TranslationManager, the default manager of %r is not." % model)
 
     # If this is a proxy model, get the concrete one
-    if model._meta.proxy:
-        if hasattr(model._meta, 'concrete_model'):
-            concrete_model = model._meta.concrete_model
-        else:
-            # We need this prior to Django 1.4
-            concrete_model = model
-            while concrete_model._meta.proxy:
-                concrete_model = concrete_model._meta.proxy_for_model
-    else:
-        concrete_model = model
+    concrete_model = model._meta.concrete_model if model._meta.proxy else model
 
     # Find the instance of TranslatedFields in the concrete model's dict
+    # We cannot use _meta.get_fields here as app registry is not ready yet.
     found = None
     for relation in list(concrete_model.__dict__.keys()):
         try:
             obj = getattr(model, relation)
-            shared_model = obj.related.model._meta.shared_model
+            if django.VERSION >= (1, 8):
+                shared_model = obj.related.field.model._meta.shared_model
+            else:
+                shared_model = obj.related.model._meta.shared_model
         except AttributeError:
             continue
         if shared_model is concrete_model:
             if found:
                 raise ImproperlyConfigured(
                     "A TranslatableModel can only define one set of "
-                    "TranslatedFields, %r defines more than one: %r to %r "
-                    "and %r to %r and possibly more" % (model, obj,
+                    "TranslatedFields, %r defines more than one: %r on %r "
+                    "and %r on %r and possibly more" % (model, obj,
                     obj.related.model, found, found.related.model))
             # Mark as found but keep looking so we catch duplicates and raise
             found = obj
@@ -400,9 +395,16 @@ def prepare_translatable_model(sender, **kwargs):
         model.add_to_class('_base_manager', Manager())
 
     # Replace get_field_by_name with one that warns for common mistakes
-    if not isinstance(model._meta.get_field_by_name, SmartGetFieldByName):
-        smart_get_field_by_name = SmartGetFieldByName(model._meta.get_field_by_name)
-        model._meta.get_field_by_name = MethodType(smart_get_field_by_name , model._meta)
+    if django.VERSION < (1, 9) and not isinstance(model._meta.get_field_by_name, SmartGetFieldByName):
+        model._meta.get_field_by_name = MethodType(
+            SmartGetFieldByName(model._meta.get_field_by_name),
+            model._meta
+        )
+    if not isinstance(model._meta.get_field, SmartGetField):
+        model._meta.get_field = MethodType(
+            SmartGetField(model._meta.get_field),
+            model._meta
+        )
 
     # Attach save_translations
     post_save.connect(model.save_translations, sender=model, weak=False)

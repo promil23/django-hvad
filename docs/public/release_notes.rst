@@ -2,15 +2,195 @@
 Release Notes
 #############
 
+.. release 1.2.0
+
+*****************************
+1.2.0 - current release
+*****************************
+
+Released on March 19, 2015
+
+This is a feature release, to push REST framework support onto the main package.
+
+Python and Django versions supported:
+
+- Due to this version being released early, end of support for
+  Django 1.5 has been postponed until next release.
+
+New features:
+
+- Support for Django REST framework is now included. It requires REST framework
+  version 3.1 or newer — :issue:`220`.
+
+.. release 1.1.1
+
+*****************************
+1.1.1
+*****************************
+
+Released on March 5, 2015
+
+Fixes:
+
+- Backwards compatibility issue in get_field implementation — :issue:`233`.
+- Admin no longer breaks on models using another ``pk`` field than ``id`` — :issue:`231`.
+
+.. release 1.1.0
+
+*****************************
+1.1.0
+*****************************
+
+Released on February 17, 2015
+
+Python and Django versions supported:
+
+- hvad now supports Django 1.8.
+- Django 1.5 has reached its end of life, and support will be dropped in hvad 1.2.
+  Note however that Django 1.4 will still be supported.
+
+New features:
+
+- It is now possible to use translated fields in the
+  :attr:`~django.db.models.Options.unique_together` and
+  :attr:`~django.db.models.Options.index_together` settings on
+  :doc:`TranslatableModel <models>`. They cannot be mixed in a single constraint
+  though, as table-spanning indexes are not supported by SQL databases.
+- The :meth:`~django.db.models.query.QuerySet.annotate` method is now supported. Support
+  is still basic for now: annotations may not access more than one level of relation.
+
+Compatibility warnings:
+
+- Internal module ``hvad.fieldtranslator`` was no longer used, and was incompatible with
+  Django 1.8. It has been removed.
+- Deprecated :meth:`~hvad.manager.TranslationManager.using_translations` has been removed.
+  It can be safely replaced by :meth:`~hvad.manager.TranslationManager.language`.
+- Deprecated :class:`~hvad.manager.TranslationFallbackManager` has been removed. Please
+  use manager's :meth:`~hvad.manager.TranslationManager.untranslated` method instead.
+- Deprecated :class:`~hvad.models.TranslatableModelBase` metaclass has been removed.
+  Since release 0.5, hvad does not trigger metaclass conflicts anymore – :issue:`188`.
+- Overriding the language in :meth:`QuerySet.get() <django.db.models.query.QuerySet.get>`
+  and :meth:`QuerySet.filter() <django.db.models.query.QuerySet.filter>` was
+  deprecated in release 0.5, and has now been removed. Either use the
+  :meth:`~hvad.manager.TranslationManager.language` method to set the
+  correct language, or specify
+  :meth:`language('all') <hvad.manager.TranslationManager.language>` to filter
+  manually through ``get`` and ``filter`` – :issue:`182`.
+- ``TranslatableModel``'s Internal attribute ``_shared_field_names`` has been removed.
+
+Deprecation list:
+
+- Passing ``unique_together`` or ``index_together`` as a ``meta`` option on
+  :class:`~hvad.models.TranslatedFields` is now deprecated and will be unsupported
+  in release 1.3. Put them in the model's :djterm:`Meta <meta-options>`
+  instead, alongside normal fields.
+- Calling ``save()`` on an invalid :ref:`TranslatableModelForm <translatablemodelform>`
+  is a bad practice and breaks on regular Django forms. This is now deprecated,
+  and relevant checks will be removed in release 1.3. Please check the form is
+  valid before saving it.
+- Generic views in ``hvad.views`` have been refactored to follow Django generic
+  view behaviors. As a result, several non-standard methods are now deprecated.
+  Please replace them with their Django equivalents — check :issue:`225`.
+
+.. release 1.0.0
+
+*****************************
+1.0.0
+*****************************
+
+Released on December 19, 2014
+
+Python and Django versions supported:
+
+- Django 1.3 is no longer supported.
+- Python 2.6 is no longer supported. Though it is likely to work for the time
+  being, it has been dropped from the tested setups.
+
+New features:
+
+- :ref:`TranslatableModelForm <translatablemodelform>` has been refactored to make
+  its behavior more consistent. As a result, it exposes two distinct language
+  selection modes, *normal* and *enforce*, and has a clear API for manually
+  overriding the language — :issue:`221`.
+- The new features of :func:`~django.forms.models.modelform_factory` introduced by
+  Django 1.6 and 1.7 are now available on
+  :ref:`translatable_modelform_factory <translatablemodelformfactory>` as
+  well — :issue:`221`.
+- :ref:`TranslationQueryset <TranslationQueryset-public>` now has a
+  :ref:`fallbacks() <fallbacks-public>` method when running on
+  Django 1.6 or newer, allowing the queryset to use fallback languages while
+  retaining all its normal functionalities – :issue:`184`.
+- Passing additional ``select`` items in method
+  :meth:`~django.db.models.query.QuerySet.extra` is now supported. — :issue:`207`.
+- It is now possible to use :ref:`TranslationQueryset <TranslationQueryset-public>`
+  as default queryset for translatable models. — :issue:`207`.
+- A lot of tests have been added, hvad now has 100% coverage on its core modules.
+  Miscellaneous glitches found in this process were fixed.
+- Added MySQL to tested database backends on Python 2.7.
+
+Compatibility warnings:
+
+- :ref:`TranslatableModelForm <translatablemodelform>` has been refactored to make
+  its behavior more consistent. The core API has not changed, but edge cases are
+  now clearly specified and some inconsistencies have disappeared, which could
+  create issues, especially:
+
+  - Direct use of the form class, without passing through the
+    :ref:`factory method <translatablemodelformfactory>`. This used to have an
+    unspecified behavior regarding language selection. Behavior is now
+    well-defined. Please ensure it works the way you expect it to.
+
+Fixes:
+
+- :ref:`TranslatableModelForm <translatablemodelform>`'s
+  :meth:`~django.forms.Form.clean` can now return `None` as per the new semantics
+  introduced in Django 1.7. — :issue:`217`.
+- Using ``Q object`` logical combinations or
+  :meth:`~django.db.models.query.QuerySet.exclude` on a translation-aware
+  manager returned by :func:`~hvad.utils.get_translation_aware_manager` no longer
+  yields wrong results.
+- Method :meth:`~django.db.models.query.QuerySet.get_or_create` now properly deals
+  with Django 1.6-style transactions.
+
+.. release 0.5.2
+
+*****************************
+0.5.2
+*****************************
+
+Released on November 8, 2014
+
+Fixes:
+
+- Admin does not break anymore on M2M fields on latest Django versions. — :issue:`212`.
+- Related fields's :meth:`~django.db.models.fields.related.RelatedManager.clear`
+  method now works properly (it used to break on MySQL, and was inefficient on
+  other engines) — :issue:`212`.
+
+.. release 0.5.1
+
+*****************************
+0.5.1
+*****************************
+
+Released on October 24, 2014
+
+Fixes:
+
+- Ecountering a regular (un-translatable) model in a deep `select_related` does
+  not break anymore. — :issue:`206`.
+- Language tabs URI are now correctly generated when changelist filters are used.
+  — :issue:`203`.
+- Admin language tab selection is no longer lost when change filters are active.
+  — :issue:`202`.
+
 .. release 0.5.0
 
 *****************************
 0.5.0
 *****************************
 
-.. note:: This version is being developed. If you feel like helping, or want the
-          very latest feature, you can install it from the `github
-          repository`_.
+Released on September 11, 2014
 
 New features:
 
@@ -41,11 +221,11 @@ New features:
   is now supported on translatable models. It accepts both translated and shared
   fields – :issue:`185`, :issue:`12`.
 - The :meth:`~hvad.manager.TranslationQueryset.select_related` method is no longer
-  limited to 1 level depth.
+  limited to 1 level depth – :issue:`192`.
 - The :meth:`~hvad.manager.TranslationQueryset.select_related` method semantics
   is now consistent with that of regular querysets. It supports passing ``None``
   to clear the list and mutiple calls mimic Django behavior. That is: cumulative
-  starting from Django 1.7 and substitutive before.
+  starting from Django 1.7 and substitutive before – :issue:`192`.
 
 Deprecation list:
 
@@ -66,7 +246,13 @@ Deprecation list:
   :meth:`~hvad.manager.TranslationManager.untranslated` method instead.
 - The :class:`~hvad.models.TranslatableModelBase` metaclass is no longer
   necessary and will be removed in next release. hvad no longer triggers metaclass
-  conflicts and ``TranslatableModelBase`` can be safely dropped.
+  conflicts and ``TranslatableModelBase`` can be safely dropped – :issue:`188`.
+- Overriding the language in :meth:`QuerySet.get() <django.db.models.query.QuerySet.get>`
+  and :meth:`QuerySet.filter() <django.db.models.query.QuerySet.filter>` is now
+  deprecated. Either use the :meth:`~hvad.manager.TranslationManager.language`
+  method to set the correct language, or specify
+  :meth:`language('all') <hvad.manager.TranslationManager.language>` to filter
+  manually through ``get`` and ``filter`` – :issue:`182`.
 
 Fixes:
 
@@ -79,6 +265,7 @@ Fixes:
   to your settings.
 - Assigning value to translatable foreign keys through its ``_id`` field no
   longer results in assigned value being ignored – :issue:`193`.
+- Tests were refactored to fully support PostgreSQL – :issue:`194`
 
 .. release 0.4.1
 
@@ -272,3 +459,4 @@ Released on May 13, 2011.
 
 .. _django-polymorphic: https://github.com/bconstantin/django_polymorphic
 .. _github repository: https://github.com/KristianOellegaard/django-hvad
+.. _packaged release: https://pypi.python.org/pypi/django-hvad

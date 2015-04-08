@@ -12,7 +12,7 @@ def main(test_runner='hvad.test_utils.runners.NormalTestRunner', junit_output_di
         test_labels = ['hvad']
     with temp_dir() as STATIC_ROOT:
         with temp_dir() as MEDIA_ROOT:
-            configure(LANGAUGE_CODE='en', TEST_RUNNER=test_runner, JUNIT_OUTPUT_DIR=junit_output_dir,
+            configure(LANGUAGE_CODE='en', TEST_RUNNER=test_runner, JUNIT_OUTPUT_DIR=junit_output_dir,
                 TIME_TESTS=time_tests, STATIC_ROOT=STATIC_ROOT, MEDIA_ROOT=MEDIA_ROOT)
             from django.conf import settings
             from django.test.utils import get_runner
@@ -28,8 +28,6 @@ if __name__ == '__main__':
     parser.add_argument('--jenkins', action='store_true', default=False,
             dest='jenkins')
     parser.add_argument('--jenkins-data-dir', default='.', dest='jenkins_data_dir')
-    parser.add_argument('--coverage', action='store_true', default=False,
-            dest='coverage')
     parser.add_argument('--failfast', action='store_true', default=False,
             dest='failfast')
     parser.add_argument('--verbosity', default=1)

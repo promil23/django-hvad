@@ -1,86 +1,142 @@
-============
-django-hvad |build|
-============
+========================================
+django-hvad |package| |coverage| |build|
+========================================
+
 **Model translations made easy.**
 
-*This project replaces the obsolete django-nani package.*
+This project adds support for model translations in Django. It is designed to be
+unobtrusive, efficient and reliable. On the technical side, it uses an automatically
+created `Translations Model` to store translatable fields in arbitrary
+languages with a foreign key to the main model, enabling fast queries.
 
-This is yet another project to make model translations suck less in
-Django. It uses an automatically created `Translations Model` to store
-translatable fields in arbitrary languages with a foreign key to the main model.
+Started in 2011, hvad has grown mature and is now used on large scale applications.
 
-- **Documentation** can be found at http://django-hvad.readthedocs.org/.
-- **Release notes** can be found at https://django-hvad.readthedocs.org/en/latest/public/release_notes.html.
-- **Support** can be found on https://github.com/KristianOellegaard/django-hvad/issues.
+Quick links:
 
-Feel free to join us at #django-hvad on irc.freenode.net for a chat
+- `Documentation`_.
+- `Release notes`_.
+- `Issue tracker`_.
 
 Features
 --------
 
-* **Simple API** - less than 10 new methods.
-* **Reliable** - more than 200 test cases and counting. |build|
-* **Versatile** - can manipulate arbitrary languages without changing the DB schema.
-* **Complete** - supports relationships, proxy models, and - from v0.5 - abstract models.
-* **Fast** - few and simple queries
-* **High level** - no custom SQL Compiler or other scary things
+* **Simple** - only 3 new queryset methods.
+* **Natural** - use Django ORM as usual, it just became language aware.
+* **Fast** - no additional queries for reads, just an inner join to an indexed key.
+* **Complete** - relationships, custom managers and querysets, proxy models, and abstract models.
 * **Batteries included** - translation-enabled forms and admin are provided.
-* **Compatible** with Django 1.3 to 1.7, running Python 2.6+ or 3.3+.
+* **Reliable** - more than 300 test cases and counting. |coverage| |build|
+* **Compatible** with Django 1.4 to 1.8, running Python 2.7, 3.3 or 3.4.
 
-**Warning**
+Django-hvad also features support for `Django REST framework`_, including
+translation-aware serializers.
 
-Although we focus on keeping the code stable and clean even on the development
-branch, django-hvad is still in beta. Please use it with caution and report any
-bug you might encounter on the `issue tracker`_. If stability is
-critical, stick to `packaged releases`_ and explicitly prevent automatic
-upgrades to next branch (e.g. put ``django-hvad>=0.4,<0.5`` in your requirements).
+Example Uses
+------------
 
+Declaring a translatable ``Book`` model::
+
+    class Book(TranslatableModel):
+        author = models.ForeignKey(Author)
+        release = models.Date()
+
+        translations = TranslatedFields(
+            title = models.CharField(max_length=250)
+        )
+
+Thus, only the title will vary based on the language. Release date and
+author are shared among all languages. Let's now create a ``Book`` instance::
+
+    # The recommended way:
+    book = Book.objects.language('en').create(
+        author = Author.objects.get(name='Antoine de Saint Exupéry'),
+        release = datetime.date(1943, 4, 6),
+        title = "The Little Prince",
+    )
+
+    # Also works
+    book = Book(language_code='en')
+    book.author = Author.objects.get(name='Antoine de Saint Exupéry')
+    book.release = datetime.date(1943, 4, 6)
+    book.title = "The Little Prince"
+    book.save()
+
+Providing some translations::
+
+    book.translate('fr')
+    book.title = "Le Petit Prince"
+    book.save()
+    book.translate('de')
+    book.title = "Der kleine Prinz"
+    book.save()
+
+Every call to ``translate()`` creates a new translation from scratch and switches
+to that translation; ``save()`` only saves the latest translation. Let's now perform
+some language-aware queries::
+
+    Book.objects.all()
+
+Compatible by default: returns all objects, without any translated fields attached.
+Starting from v1.0, default behavior can be overriden to work like next query::
+
+    Book.objects.language().all()
+
+Returns all objects as translated instances, but only the ones that are translated
+into the currect language. You can also specify which language to get, using e.g.::
+
+    Book.objects.language("en").all()
+
+Usual queryset methods work like they always did: let's get all books as translated instances,
+filtering on the ``title`` attribute, returning those that have
+``Petit Prince`` in their French title, ordered by publication date (in their
+French edition)::
+
+    Book.objects.language("fr").filter(title__contains='Petit Prince').order_by('release')
+
+Other random examples::
+
+    # last German book published in year 1948
+    Book.objects.language("de").filter(release__year=1948).latest()
+
+    # other books from the same author as mybook. Cache author as well.
+    Book.objects.language().select_related('author').filter(author__books=mybook)
+
+    # books that have "Django" in their title, regardless of the language
+    Book.objects.language('all').filter(title__icontains='Django')
+
+
+More examples in the `quickstart guide`_.
 
 Releases
 --------
 
-Starting from v0.4, django-hvad uses the same release pattern as Django. The
-following versions are thus available:
+Django-hvad uses the same release pattern as Django. The following versions
+are thus available:
 
-* Stable branch 0.4, available through `PyPI`_ and git branch ``releases/0.4.x``.
-* Development branch 0.5, available through git branch ``master``.
+* Stable branch 1.0, available through `PyPI`_ and git branch ``releases/1.0.x``.
+* Stable branch 1.1, available through `PyPI`_ and git branch ``releases/1.1.x``.
+* Stable branch 1.2, available through `PyPI`_ and git branch ``releases/1.2.x``.
+* Development branch 1.3, available through git branch ``master``.
 
-See the `installation guide`_ for details, or have a look at the
-`release notes`_.
-
-Example Use
------------
-
-             Books.objects.all()
-
-Returns all objects, but without any translated fields attached - this query is
-just the default django queryset and can therefore be used as usual.
-
-             Books.objects.language().all()
-
-Returns all objects as translated instances, but only the ones that are translated
-into the currect language. You can also specify which language to get, using e.g.
-
-             Books.objects.language("en").all()
-
-Usual queryset methods work as usual: let's get all books as translated instances,
-filtering on the translatable ``title`` attribute, returning those that have
-``Petit Prince`` in their French title, ordered by publication date (in their
-French edition):
-
-             Books.objects.language("fr").filter(title__contains='Petit Prince').order_by('publish_date')
-
-More examples in the `quickstart guide`_.
+Stable branches have minor bugfix releases as needed, with guaranteed compatibility.
+See the `installation guide`_ for details, or have a look at the `release notes`_.
 
 Thanks to
 ---------
 
 Jonas Obrist (https://github.com/ojii) for making django-nani and for helping me with this project.
 
+.. |package| image:: https://badge.fury.io/py/django-hvad.svg
+                     :target: https://pypi.python.org/pypi/django-hvad
 .. |build| image:: https://secure.travis-ci.org/KristianOellegaard/django-hvad.png?branch=master
-.. _PyPI: https://pypi.python.org/pypi/django-hvad
-.. _packaged releases: https://pypi.python.org/pypi/django-hvad
-.. _installation guide: http://django-hvad.readthedocs.org/en/latest/public/installation.html
+.. |coverage| image:: https://coveralls.io/repos/KristianOellegaard/django-hvad/badge.png
+                      :target: https://coveralls.io/r/KristianOellegaard/django-hvad
+
+.. _documentation: http://django-hvad.readthedocs.org/
 .. _release notes: https://django-hvad.readthedocs.org/en/latest/public/release_notes.html
-.. _quickstart guide: http://django-hvad.readthedocs.org/en/latest/public/quickstart.html
 .. _issue tracker: https://github.com/KristianOellegaard/django-hvad/issues
+.. _PyPI: https://pypi.python.org/pypi/django-hvad
+.. _Django REST framework: http://www.django-rest-framework.org/
+.. _installation guide: http://django-hvad.readthedocs.org/en/latest/public/installation.html
+.. _quickstart guide: http://django-hvad.readthedocs.org/en/latest/public/quickstart.html
+

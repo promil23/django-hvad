@@ -2,13 +2,8 @@ import django
 from django.db import models
 from django.template.defaultfilters import slugify
 from hvad.models import TranslatableModel, TranslatedFields
-if django.VERSION >= (1, 4, 2):
-    from django.utils.encoding import python_2_unicode_compatible
-else: # older versions do not run on py3, so we know we are running py2
-    def python_2_unicode_compatible(klass):
-        klass.__unicode__ = klass.__str__
-        klass.__str__ = lambda self: self.__unicode__().encode('utf-8')
-        return klass
+from hvad.manager import TranslationManager, TranslationQueryset
+from django.utils.encoding import python_2_unicode_compatible
 
 #===============================================================================
 # Basic models
@@ -18,6 +13,16 @@ class Normal(TranslatableModel):
     shared_field = models.CharField(max_length=255)
     translations = TranslatedFields(
         translated_field = models.CharField(max_length=255)
+    )
+
+    def __str__(self):
+        return self.safe_translation_getter('translated_field', self.shared_field)
+
+@python_2_unicode_compatible
+class Unique(TranslatableModel):
+    shared_field = models.CharField(max_length=255, unique=True)
+    translations = TranslatedFields(
+        translated_field = models.CharField(max_length=255, unique=True)
     )
 
     def __str__(self):
@@ -59,6 +64,7 @@ class RelatedProxy(Related):
 class SimpleRelated(TranslatableModel):
     """ Model with foreign key to Normal, shared only and regular translatable field """
     normal = models.ForeignKey(Normal, related_name='simplerel')
+    manynormals = models.ManyToManyField(Normal, blank=True, related_name='manysimplerel')
     translated_fields = TranslatedFields(
         translated_field = models.CharField(max_length=255),
     )
@@ -96,6 +102,42 @@ class Standard(models.Model):
     """ Untranslatable Model with foreign key to Normal """
     normal_field = models.CharField(max_length=255)
     normal = models.ForeignKey(Normal, related_name='standards')
+    date = models.ForeignKey('Date', null=True, related_name='standards')
+
+
+class StandardRelated(TranslatableModel):
+    """ Translatable mode with foreign key to untranslatable """
+    shared_field = models.CharField(max_length=255)
+    standard = models.ForeignKey(Standard, related_name='related')
+    translations = TranslatedFields(
+        translated_field = models.CharField(max_length=255),
+    )
+
+
+class FullTranslationManager(TranslationManager):
+    use_for_related_fields = True
+    default_class = TranslationQueryset
+
+class QONormal(TranslatableModel):
+    shared_field = models.CharField(max_length=255)
+    translations = TranslatedFields(
+        translated_field = models.CharField(max_length=255)
+    )
+    objects = FullTranslationManager()
+
+class QOSimpleRelated(TranslatableModel):
+    normal = models.ForeignKey(QONormal, related_name='simplerel', null=True)
+    translations = TranslatedFields(
+        translated_field = models.CharField(max_length=255),
+    )
+    objects = FullTranslationManager()
+
+class QOMany(TranslatableModel):
+    normals = models.ManyToManyField(QONormal, related_name="manyrels")
+    translations = TranslatedFields(
+        translated_field = models.CharField(max_length=255),
+    )
+    objects = FullTranslationManager()
 
 
 #===============================================================================

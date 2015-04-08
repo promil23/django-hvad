@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 import django
+from django.db import connection
 from django.db.models.query_utils import Q
-from hvad.test_utils.context_managers import LanguageOverride
+from django.utils import translation
 from hvad.test_utils.data import NORMAL, STANDARD
-from hvad.test_utils.testcase import HvadTestCase
+from hvad.test_utils.testcase import HvadTestCase, minimumDjangoVersion
 from hvad.test_utils.project.app.models import Normal, AggregateModel, Standard, SimpleRelated
 from hvad.test_utils.fixtures import NormalFixture, StandardFixture
 
@@ -30,6 +31,20 @@ class FilterTests(HvadTestCase, NormalFixture):
         self.assertEqual(obj1.translated_field, NORMAL[1].translated_field['en'])
         self.assertEqual(obj2.shared_field, NORMAL[2].shared_field)
         self.assertEqual(obj2.translated_field, NORMAL[2].translated_field['en'])
+
+    @minimumDjangoVersion(1, 6)
+    def test_fallbacks_filter(self):
+        (Normal.objects.language('en')
+                    .filter(shared_field=NORMAL[1].shared_field)
+                    .delete_translations())
+        with translation.override('en'):
+            qs = Normal.objects.language().fallbacks()
+            with self.assertNumQueries(2):
+                self.assertEqual(qs.count(), self.normal_count)
+                self.assertEqual(len(qs), self.normal_count)
+            with self.assertNumQueries(0):
+                self.assertCountEqual((obj.pk for obj in qs), tuple(self.normal_id.values()))
+                self.assertCountEqual((obj.language_code for obj in qs), self.translations)
 
     def test_all_languages_filter(self):
         with self.assertNumQueries(2):
@@ -62,15 +77,25 @@ class FilterTests(HvadTestCase, NormalFixture):
             self.assertEqual(obj.translated_field, NORMAL[1].translated_field['en'])
 
     def test_deferred_language_filter(self):
-        with LanguageOverride('ja'):
+        with translation.override('ja'):
             qs = Normal.objects.language().filter(translated_field__contains='English')
-        with LanguageOverride('en'):
+        with translation.override('en'):
             self.assertEqual(qs.count(), self.normal_count)
             obj1, obj2 = qs
             self.assertEqual(obj1.shared_field, NORMAL[1].shared_field)
             self.assertEqual(obj1.translated_field, NORMAL[1].translated_field['en'])
             self.assertEqual(obj2.shared_field, NORMAL[2].shared_field)
             self.assertEqual(obj2.translated_field, NORMAL[2].translated_field['en'])
+
+
+class ExtraTests(HvadTestCase, NormalFixture):
+    normal_count = 2
+
+    def test_simple_extra(self):
+        qs = Normal.objects.language('en').extra(select={'test_extra': '2 + 2'})
+        self.assertEqual(qs.count(), self.normal_count)
+        self.assertEqual(int(qs[0].test_extra), 4)
+
 
 class QueryCachingTests(HvadTestCase, NormalFixture):
     normal_count = 2
@@ -92,7 +117,7 @@ class QueryCachingTests(HvadTestCase, NormalFixture):
             self.assertEqual(bool(qs), length != 0)
 
     def test_iter_caches(self):
-        with LanguageOverride('en'):
+        with translation.override('en'):
             index = 0
             qs = Normal.objects.language().filter(pk=self.normal_id[1])
             for obj in qs:
@@ -102,19 +127,19 @@ class QueryCachingTests(HvadTestCase, NormalFixture):
 
     def test_pickling_caches(self):
         import pickle
-        with LanguageOverride('en'):
+        with translation.override('en'):
             qs = Normal.objects.language().filter(pk=self.normal_id[1])
             pickle.dumps(qs)
             self._try_all_cache_using_methods(qs, 1)
 
     def test_len_caches(self):
-        with LanguageOverride('en'):
+        with translation.override('en'):
             qs = Normal.objects.language().filter(pk=self.normal_id[1])
             self.assertEqual(len(qs), 1)
             self._try_all_cache_using_methods(qs, 1)
 
     def test_bool_caches(self):
-        with LanguageOverride('en'):
+        with translation.override('en'):
             qs = Normal.objects.language().filter(pk=self.normal_id[1])
             self.assertTrue(qs)
             self._try_all_cache_using_methods(qs, 1)
@@ -124,12 +149,12 @@ class IterTests(HvadTestCase, NormalFixture):
     normal_count = 2
 
     def test_simple_iter(self):
-        with LanguageOverride('en'):
+        with translation.override('en'):
             with self.assertNumQueries(1):
                 for index, obj in enumerate(Normal.objects.language(), 1):
                     self.assertEqual(obj.shared_field, NORMAL[index].shared_field)
                     self.assertEqual(obj.translated_field, NORMAL[index].translated_field['en'])
-        with LanguageOverride('ja'):
+        with translation.override('ja'):
             with self.assertNumQueries(1):
                 for index, obj in enumerate(Normal.objects.language(), 1):
                     self.assertEqual(obj.shared_field, NORMAL[index].shared_field)
@@ -137,13 +162,13 @@ class IterTests(HvadTestCase, NormalFixture):
 
     def test_iter_unique_reply(self):
         # Make sure .all() only returns unique rows
-        with LanguageOverride('en'):
+        with translation.override('en'):
             self.assertEqual(len(Normal.objects.all()), len(Normal.objects.untranslated()))
 
     def test_iter_deferred_language(self):
-        with LanguageOverride('en'):
+        with translation.override('en'):
             qs = Normal.objects.language()
-        with LanguageOverride('ja'):
+        with translation.override('ja'):
             for index, obj in enumerate(qs, 1):
                 self.assertEqual(obj.shared_field, NORMAL[index].shared_field)
                 self.assertEqual(obj.translated_field, NORMAL[index].translated_field['ja'])
@@ -158,7 +183,7 @@ class UpdateTests(HvadTestCase, NormalFixture):
         n2 = Normal.objects.language('en').get(pk=self.normal_id[2])
         ja1 = Normal.objects.language('ja').get(pk=self.normal_id[1])
         ja2 = Normal.objects.language('ja').get(pk=self.normal_id[2])
-        with self.assertNumQueries(1):
+        with self.assertNumQueries(1 if connection.features.update_can_self_select else 2):
             Normal.objects.language('en').update(shared_field=NEW_SHARED)
         new1 = Normal.objects.language('en').get(pk=self.normal_id[1])
         new2 = Normal.objects.language('en').get(pk=self.normal_id[2])
@@ -200,7 +225,7 @@ class UpdateTests(HvadTestCase, NormalFixture):
         NEW_TRANSLATED = 'new translated'
         ja1 = Normal.objects.language('ja').get(pk=self.normal_id[1])
         ja2 = Normal.objects.language('ja').get(pk=self.normal_id[2])
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(2 if connection.features.update_can_self_select else 3):
             Normal.objects.language('en').update(
                 shared_field=NEW_SHARED, translated_field=NEW_TRANSLATED
             )
@@ -224,9 +249,9 @@ class UpdateTests(HvadTestCase, NormalFixture):
         n2 = Normal.objects.language('en').get(pk=self.normal_id[2])
         ja1 = Normal.objects.language('ja').get(pk=self.normal_id[1])
         ja2 = Normal.objects.language('ja').get(pk=self.normal_id[2])
-        with LanguageOverride('ja'):
+        with translation.override('ja'):
             qs = Normal.objects.language()
-        with LanguageOverride('en'):
+        with translation.override('en'):
             with self.assertNumQueries(1):
                 qs.update(translated_field=NEW_TRANSLATED)
         new1 = Normal.objects.language('en').get(pk=self.normal_id[1])
@@ -268,9 +293,9 @@ class ValuesListTests(HvadTestCase, NormalFixture):
         self.assertCountEqual(values_list, check)
 
     def test_values_list_deferred_language(self):
-        with LanguageOverride('ja'):
+        with translation.override('ja'):
             qs = Normal.objects.language()
-        with LanguageOverride('en'):
+        with translation.override('en'):
             values = qs.values_list('shared_field', 'translated_field')
             values_list = list(values)
         check = [
@@ -330,9 +355,9 @@ class ValuesTests(HvadTestCase, NormalFixture):
         self.assertCountEqual(values_list, check)
 
     def test_values_deferred_language(self):
-        with LanguageOverride('ja'):
+        with translation.override('ja'):
             qs = Normal.objects.language()
-        with LanguageOverride('en'):
+        with translation.override('en'):
             values = qs.values('translated_field')
             values_list = list(values)
         check = [
@@ -343,6 +368,11 @@ class ValuesTests(HvadTestCase, NormalFixture):
 
 class InBulkTests(HvadTestCase, NormalFixture):
     normal_count = 2
+
+    def test_empty_in_bulk(self):
+        with self.assertNumQueries(0):
+            result = Normal.objects.language('en').in_bulk([])
+            self.assertEqual(len(result), 0)
 
     def test_in_bulk(self):
         pk1, pk2 = self.normal_id[1], self.normal_id[2]
@@ -358,7 +388,7 @@ class InBulkTests(HvadTestCase, NormalFixture):
 
     def test_untranslated_in_bulk(self):
         pk1 = self.normal_id[1]
-        with LanguageOverride('ja'):
+        with translation.override('ja'):
             with self.assertNumQueries(2):
                 result = Normal.objects.untranslated().in_bulk([pk1])
                 self.assertCountEqual((pk1,), result)
@@ -366,15 +396,31 @@ class InBulkTests(HvadTestCase, NormalFixture):
                 self.assertEqual(result[pk1].translated_field, NORMAL[1].translated_field['ja'])
                 self.assertEqual(result[pk1].language_code, 'ja')
 
+    @minimumDjangoVersion(1, 6)
+    def test_fallbacks_in_bulk(self):
+        (Normal.objects.language('en')
+                       .filter(shared_field=NORMAL[2].shared_field)
+                       .delete_translations())
+        with self.assertNumQueries(1):
+            pk1, pk2 = self.normal_id[1], self.normal_id[2]
+            result = Normal.objects.language('en').fallbacks('de', 'ja').in_bulk([pk1, pk2])
+            self.assertCountEqual((pk1, pk2), result)
+            self.assertEqual(result[pk1].shared_field, NORMAL[1].shared_field)
+            self.assertEqual(result[pk1].translated_field, NORMAL[1].translated_field['en'])
+            self.assertEqual(result[pk1].language_code, 'en')
+            self.assertEqual(result[pk2].shared_field, NORMAL[2].shared_field)
+            self.assertEqual(result[pk2].translated_field, NORMAL[2].translated_field['ja'])
+            self.assertEqual(result[pk2].language_code, 'ja')
+
     def test_all_languages_in_bulk(self):
         with self.assertRaises(ValueError):
             Normal.objects.language('all').in_bulk([self.normal_id[1]])
 
     def test_in_bulk_deferred_language(self):
         pk1 = self.normal_id[1]
-        with LanguageOverride('ja'):
+        with translation.override('ja'):
             qs = Normal.objects.language()
-        with LanguageOverride('en'):
+        with translation.override('en'):
             result = qs.in_bulk([pk1])
             self.assertCountEqual((pk1,), result)
             self.assertEqual(result[pk1].shared_field, NORMAL[1].shared_field)
@@ -414,9 +460,9 @@ class DeleteTests(HvadTestCase, NormalFixture):
 
     def test_delete_translation_deferred_language(self):
         self.assertEqual(Normal._meta.translations_model.objects.count(), 4)
-        with LanguageOverride('ja'):
+        with translation.override('ja'):
             qs = Normal.objects.language()
-        with LanguageOverride('en'):
+        with translation.override('en'):
             qs.delete_translations()
 
         self.assertEqual(Normal.objects.language('ja').count(), 2)
@@ -462,11 +508,10 @@ class AggregateTests(HvadTestCase):
 
 
 class NotImplementedTests(HvadTestCase):
-    def test_defer(self):
+    def test_notimplemented(self):
         baseqs = SimpleRelated.objects.language('en')
         
         self.assertRaises(NotImplementedError, baseqs.defer, 'shared_field')
-        self.assertRaises(NotImplementedError, baseqs.annotate)
         self.assertRaises(NotImplementedError, baseqs.only)
         self.assertRaises(NotImplementedError, baseqs.bulk_create, [])
         # select_related with no field is not implemented
@@ -493,10 +538,24 @@ class ExcludeTests(HvadTestCase, NormalFixture):
         qs = Normal.objects.language('en').exclude(translated_field=NORMAL[1].translated_field['en'])
         self.assertEqual(qs.count(), 0)
 
+    @minimumDjangoVersion(1, 6)
+    def test_fallbacks_exclude(self):
+        (Normal.objects.language('en')
+                       .filter(shared_field=NORMAL[1].shared_field)
+                       .delete_translations())
+        qs = (Normal.objects.language('en')
+                            .fallbacks('de', 'ja')
+                            .exclude(shared_field=NORMAL[1].shared_field))
+        self.assertEqual(qs.count(), 0)
+
     def test_all_languages_exclude(self):
         qs = Normal.objects.language('all').exclude(translated_field=NORMAL[1].translated_field['en'])
         self.assertEqual(qs.count(), 1)
         self.assertEqual(qs[0].translated_field, NORMAL[1].translated_field['ja'])
+
+    def test_invalid_all_languages_exclude(self):
+        with self.assertRaises(ValueError):
+            Normal.objects.language().exclude(language_code='all')
 
 
 class ComplexFilterTests(HvadTestCase, StandardFixture, NormalFixture):
@@ -534,7 +593,7 @@ class ComplexFilterTests(HvadTestCase, StandardFixture, NormalFixture):
         translated_two_en = Q(normal__translated_field=NORMAL[STANDARD[2].normal].translated_field['en'])
 
         # control group test
-        with LanguageOverride('en'):
+        with translation.override('en'):
             qs = manager.filter(shared_one)
             self.assertEqual(qs.count(), 1)
             obj = qs[0]
@@ -562,14 +621,14 @@ class ComplexFilterTests(HvadTestCase, StandardFixture, NormalFixture):
 
             # test various union combinations
             qs = manager.filter(Q(normal_one | translated_one_en))
-            self.assertEqual(qs.count(), 2)
+            self.assertEqual(qs.count(), 1)
             qs = manager.filter(Q(shared_one | translated_one_en))
-            self.assertEqual(qs.count(), 2)
+            self.assertEqual(qs.count(), 1)
 
             qs = manager.filter(Q(normal_one | translated_two_en))
-            self.assertEqual(qs.count(), 3)
+            self.assertEqual(qs.count(), 2)
             qs = manager.filter(Q(shared_one | translated_two_en))
-            self.assertEqual(qs.count(), 3)
+            self.assertEqual(qs.count(), 2)
 
             qs = manager.filter(Q(translated_one_en | translated_two_en))
             self.assertEqual(qs.count(), 2)
