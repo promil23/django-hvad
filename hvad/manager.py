@@ -303,7 +303,7 @@ class TranslationQueryset(QuerySet):
         qs = super(TranslationQueryset, self)._clone()
         qs.__class__ = QuerySet
         # un-select-related the 'master' relation
-        del qs.query.select_related['master']
+        qs.query.select_related = False
         accessor = self.shared_model._meta.translations_accessor
         # update using the real manager
         return QuerySet(self.shared_model, using=self.db).filter(**{'%s__in' % accessor: qs})

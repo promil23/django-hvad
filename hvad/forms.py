@@ -171,14 +171,11 @@ class TranslatableModelForm(with_metaclass(TranslatableModelFormMetaclass, Model
 
         trans_model = self.instance._meta.translations_model
         language_code = self.cleaned_data.get('language_code', get_language())
-        #from portal.models import logger
-        #logger.debug('llllllllllll %s', str(type(self)))
         if hasattr(self, 'is_edit'):
             is_edit = self.is_edit
 
         if not new:
             trans = get_cached_translation(self.instance)
-            #logger.debug('llllllllllll %s %s %s', str(self.instance), language_code)
             if not trans or trans.language_code != language_code:
                 if is_edit:
                     trans = get_translation(self.instance, trans.language_code)
