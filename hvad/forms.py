@@ -131,8 +131,8 @@ class BaseTranslatableModelForm(BaseModelForm):
             in the cleaned_data.
         '''
         data = super(BaseTranslatableModelForm, self).clean()
-        if hasattr(self, 'language'):
-            data['language_code'] = self.language
+        #if hasattr(self, 'language'):
+        #    data['language_code'] = self.language
         return data
 
     def _post_clean(self):
@@ -145,7 +145,11 @@ class BaseTranslatableModelForm(BaseModelForm):
         result = super(BaseTranslatableModelForm, self)._post_clean()
 
         enforce = 'language_code' in self.cleaned_data
-        language = self.cleaned_data.get('language_code') or get_language()
+
+        if self.is_edit:
+            language = self.language or get_language()
+        else:
+            language = self.cleaned_data.get('language_code') or get_language()
         translation = load_translation(self.instance, language, enforce)
         set_cached_translation(self.instance, translation)
         return result
@@ -175,13 +179,19 @@ class BaseTranslatableModelForm(BaseModelForm):
         # It should have been done in _post_clean, but instance may have been
         # changed since.
         enforce = 'language_code' in self.cleaned_data
-        language = self.cleaned_data.get('language_code') or get_language()
+        if self.is_edit:
+            language = self.language or get_language()
+        else:
+            language = self.cleaned_data.get('language_code') or get_language()
         translation = load_translation(self.instance, language, enforce)
 
         # Fill the translated fields with values from the form
         excludes = list(self._meta.exclude) + ['master', 'language_code']
         translation = construct_instance(self, translation,
                                          self._meta.fields, excludes)
+
+        if self.is_edit:
+            translation.language_code = self.cleaned_data['language_code']
         set_cached_translation(self.instance, translation)
 
         # Delegate shared fields to super()

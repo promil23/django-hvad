@@ -88,6 +88,8 @@ class ValuesMixin(object):
 
     def iterator(self):
         qs = self._clone()._add_language_filter()
+        # un-select-related the 'master' relation
+        qs.query.select_related = False
         for row in super(ValuesMixin, qs).iterator():
             if isinstance(row, dict):
                 yield qs._reverse_translate_fieldnames_dict(row)
@@ -301,6 +303,7 @@ class TranslationQueryset(QuerySet):
         qs.__class__ = QuerySet
         # un-select-related the 'master' relation
         qs.query.select_related = False
+        #del qs.query.select_related['master']
         accessor = self.shared_model._meta.translations_accessor
         # update using the real manager
         return QuerySet(self.shared_model, using=self.db).filter(**{'%s__in' % accessor: qs})
