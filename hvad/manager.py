@@ -1106,6 +1106,7 @@ class TranslationAwareQueryset(QuerySet):
             (self._translate(key, self.model, language_joins), value)
             for key, value in kwargs.items()
         )
+
         newargs = deepcopy(args)
         for q in newargs:
             for child, children, index in q_children(q):

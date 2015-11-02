@@ -146,7 +146,8 @@ class BaseTranslatableModelForm(BaseModelForm):
 
         enforce = 'language_code' in self.cleaned_data
 
-        if self.is_edit:
+        #if self.is_edit:
+        if getattr(self, 'is_edit', False):
             language = self.language or get_language()
         else:
             language = self.cleaned_data.get('language_code') or get_language()
@@ -179,7 +180,7 @@ class BaseTranslatableModelForm(BaseModelForm):
         # It should have been done in _post_clean, but instance may have been
         # changed since.
         enforce = 'language_code' in self.cleaned_data
-        if self.is_edit:
+        if getattr(self, 'is_edit', False):
             language = self.language or get_language()
         else:
             language = self.cleaned_data.get('language_code') or get_language()
@@ -190,7 +191,7 @@ class BaseTranslatableModelForm(BaseModelForm):
         translation = construct_instance(self, translation,
                                          self._meta.fields, excludes)
 
-        if self.is_edit:
+        if getattr(self, 'is_edit', False):
             translation.language_code = self.cleaned_data['language_code']
         set_cached_translation(self.instance, translation)
 

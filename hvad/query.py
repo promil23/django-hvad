@@ -83,6 +83,7 @@ def query_terms(model, path):
     else:
         return  # all bits were recognized as fields, job done
 
+    #print bits
     # STEP 3 -- Flush lookup/transform bits - do not handle invalid stuff, Django will do it
     for depth, bit in enumerate(bits[depth:], depth):
         yield QueryTerm(
