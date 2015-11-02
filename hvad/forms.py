@@ -42,6 +42,8 @@ class TranslatableModelFormMetaclass(ModelFormMetaclass):
 
         # Force exclusion of language_code as we use cleaned_data['language_code']
         exclude = meta.exclude = list(getattr(meta, 'exclude', ()))
+        #if 'language_code' not in exclude:
+        #    exclude.append('language_code')
         if fields is not None and 'language_code' in fields:
             raise FieldError('Field \'language_code\' is invalid.')
 
@@ -129,7 +131,7 @@ class BaseTranslatableModelForm(BaseModelForm):
             in the cleaned_data.
         '''
         data = super(BaseTranslatableModelForm, self).clean()
-        if hasattr(self, 'language'):
+        if not getattr(self, 'is_edit', False) and hasattr(self, 'language'):
             data['language_code'] = self.language
         return data
 
@@ -140,14 +142,19 @@ class BaseTranslatableModelForm(BaseModelForm):
             to allow an overriden save to set some translated field values before
             invoking super().
         '''
-        enforce = 'language_code' in self.cleaned_data
-        language = self.cleaned_data.get('language_code') or get_language()
-        translation = load_translation(self.instance, language, enforce)
 
+        enforce = 'language_code' in self.cleaned_data
+        if getattr(self, 'is_edit', False):
+            language = self.language or get_language()
+            result = super(BaseTranslatableModelForm, self)._post_clean()
+        else:
+            language = self.cleaned_data.get('language_code') or get_language()
+        translation = load_translation(self.instance, language, enforce)
         exclude = self._get_validation_exclusions()
         translation = construct_instance(self, translation, self._meta.fields, exclude)
         set_cached_translation(self.instance, translation)
-        result = super(BaseTranslatableModelForm, self)._post_clean()
+        if not getattr(self, 'is_edit', False):
+            result = super(BaseTranslatableModelForm, self)._post_clean()
         return result
 
     def _get_validation_exclusions(self):
@@ -184,13 +191,18 @@ class BaseTranslatableModelForm(BaseModelForm):
         # It should have been done in _post_clean, but instance may have been
         # changed since.
         enforce = 'language_code' in self.cleaned_data
-        language = self.cleaned_data.get('language_code') or get_language()
+        if getattr(self, 'is_edit', False):
+            language = self.language or get_language()
+        else:
+            language = self.cleaned_data.get('language_code') or get_language()
         translation = load_translation(self.instance, language, enforce)
 
         # Fill the translated fields with values from the form
         excludes = list(self._meta.exclude) + ['master', 'language_code']
         translation = construct_instance(self, translation,
                                          self._meta.fields, excludes)
+        if getattr(self, 'is_edit', False):
+            translation.language_code = self.cleaned_data['language_code']
         set_cached_translation(self.instance, translation)
 
         # Delegate shared fields to super()
