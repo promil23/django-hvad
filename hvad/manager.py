@@ -1096,7 +1096,10 @@ class TranslationAwareQueryset(QuerySet):
                 children[index] = (self._translate(child[0], self.model, language_joins),
                                    child[1])
         for langjoin in language_joins:
-            extra_filters &= Q(**{langjoin: self._language_code})
+            if self._language_code == 'all':
+                continue
+            else:
+                extra_filters &= Q(**{langjoin: self._language_code})
         return newargs, newkwargs, extra_filters
 
     def _translate_fieldnames(self, fields):
