@@ -124,7 +124,12 @@ def create_translations_model(model, related_name, meta, **fields):
         meta['index_together'] = tuple(tconst)
 
     if not abstract:
-        unique = [('language_code', 'master')]
+        from mptt.models import MPTTModelBase
+        #print 'user' in fields
+        if not isinstance(model, MPTTModelBase) and 'user' in fields:
+            unique = [('language_code', 'master', 'user')]
+        else:
+            unique = [('language_code', 'master')]
         meta['unique_together'] = list(meta.get('unique_together', [])) + unique
     Meta = type('Meta', (object,), meta)
 
