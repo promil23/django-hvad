@@ -117,12 +117,18 @@ get_available_languages
 save
 ====
 
-.. method:: save(force_insert=False, force_update=False, using=None)
+.. method:: save(force_insert=False, force_update=False, using=None, update_fields=None)
 
     Overrides :meth:`~django.db.models.Model.save`.
 
     This method runs an extra query to save the translation cached on
     this instance, if any translation was cached.
+
+    It accepts both translated and untranslated fields in ``update_fields``.
+
+    - If only untranslated fields are specified, the extra query will be skipped.
+    - If only translated fields are specified, the shared model update will be skipped.
+      Note that this means signals will not be triggered.
 
 
 **********************
@@ -293,6 +299,42 @@ In other terms, all queries become translation-aware by default.
              if some objects have no translation in current language.
              Use caution when combining this feature with other manager-altering
              modules.
+
+.. _custom-translation-models:
+
+Custom Translation Models
+=========================
+
+.. versionadded:: 1.5
+
+It is possible to have :term:`translations <Translations Model>` use a custom base
+class, by specifying a ``base_class`` argument to :class:`~hvad.models.TranslatedFields`.
+This may be useful for advanced manipulation of translations, such as customizing some
+model methods, for instance :meth:`~django.db.models.Model.from_db`::
+
+    class BookTranslation(models.Model):
+        @classmethod
+        def from_db(cls, db, fields, values):
+            obj = super(BookTranslation, self).from_db(cls, db, field, values)
+            obj.loaded_at = timezone.now()
+            return obj
+
+        class Meta:
+            abstract = True
+
+    class Book(TranslatableModel):
+        translations = TranslatedFields(
+            base_class = BookTranslation,
+            name = models.CharField(max_length=255),
+        )
+
+In this example, the ``Book``'s translation model will have ``BookTranslation`` as its
+first base class, so every translation will have a ``loaded_at`` attribute when loaded
+from the database. Keep in mind this attribute will *not* be available on the book itself,
+but can be accessed through ``get_cached_translation(book).loaded_at``.
+
+Such classes are inserted into the translations inheritance tree, so if some other model
+inherits ``Book``, its translations will also inherit ``BookTranslation``.
 
 --------
 

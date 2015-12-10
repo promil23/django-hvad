@@ -213,7 +213,6 @@ class StandardToTransFKTest(HvadTestCase, StandardFixture, NormalFixture):
             for obj in by_translated_field:
                 self.assertTrue(obj in en.standards.all())
 
-    @minimumDjangoVersion(1, 6)
     def test_earliest(self):
         from datetime import datetime, timedelta
         now = datetime.now()
@@ -294,10 +293,7 @@ class StandardToTransFKTest(HvadTestCase, StandardFixture, NormalFixture):
         with translation.override('en'):
             self.assertRaises(NotImplementedError, manager.aggregate)
             self.assertRaises(NotImplementedError, manager.dates, 'dummy', 'dummy')
-            if django.VERSION < (1, 6):
-                self.assertRaises(AttributeError, getattr, manager, 'datetimes')
-            else:
-                self.assertRaises(NotImplementedError, manager.datetimes, 'dummy')
+            self.assertRaises(NotImplementedError, manager.datetimes, 'dummy')
             self.assertRaises(NotImplementedError, manager.complex_filter, Q(normal_field=''))
             self.assertRaises(NotImplementedError, manager.annotate)
             self.assertRaises(NotImplementedError, manager.reverse)
@@ -454,7 +450,6 @@ class SelectRelatedTests(HvadTestCase, NormalFixture):
         with self.assertRaises(FieldError):
             list(RelatedRelated.objects.language().select_related('simple__manynormals'))
 
-    @minimumDjangoVersion(1, 6)
     def test_fallbacks_raise(self):
         with self.assertRaises(NotImplementedError):
             list(Related.objects.language().fallbacks().select_related('normal'))
@@ -490,7 +485,11 @@ class SelectRelatedTests(HvadTestCase, NormalFixture):
     def test_select_related_cleans_cache(self):
         with translation.override('en'):
             rel_objects = SimpleRelated.objects.language().select_related('normal')
-            cache = getattr(Normal, Normal._meta.translations_accessor).related.get_cache_name()
+            cache = (
+                getattr(Normal, Normal._meta.translations_accessor).rel.get_cache_name()
+                if django.VERSION >= (1, 9) else
+                getattr(Normal, Normal._meta.translations_accessor).related.get_cache_name()
+            )
             self.assertFalse(hasattr(rel_objects[0].normal, cache))
 
     def test_select_related_using_get(self):

@@ -26,7 +26,7 @@ Features
 * **Complete** - relationships, custom managers and querysets, proxy models, and abstract models.
 * **Batteries included** - translation-enabled forms and admin are provided.
 * **Reliable** - more than 300 test cases and counting. |coverage| |build|
-* **Compatible** with Django 1.4 to 1.8, running Python 2.7, 3.3 or 3.4.
+* **Compatible** with Django 1.4 to 1.9, running Python 2.7, 3.3, 3.4 or 3.5.
 
 Django-hvad also features support for `Django REST framework`_ 3.1 or newer, including
 translation-aware serializers.
@@ -113,10 +113,10 @@ Releases
 Django-hvad uses the same release pattern as Django. The following versions
 are thus available:
 
-* Stable branch 1.0, available through `PyPI`_ and git branch ``releases/1.0.x``.
-* Stable branch 1.1, available through `PyPI`_ and git branch ``releases/1.1.x``.
 * Stable branch 1.2, available through `PyPI`_ and git branch ``releases/1.2.x``.
-* Development branch 1.3, available through git branch ``master``.
+* Stable branch 1.3, available through `PyPI`_ and git branch ``releases/1.3.x``.
+* Stable branch 1.4, available through `PyPI`_ and git branch ``releases/1.4.x``.
+* Development branch 1.5, available through git branch ``master``.
 
 Stable branches have minor bugfix releases as needed, with guaranteed compatibility.
 See the `installation guide`_ for details, or have a look at the `release notes`_.
@@ -125,6 +125,9 @@ Thanks to
 ---------
 
 Jonas Obrist (https://github.com/ojii) for making django-nani and for helping me with this project.
+
+Kristian Øllegaard (https://github.com/KristianOellegaard/) for django-hvad and trusting me
+to continue the development.
 
 .. |package| image:: https://badge.fury.io/py/django-hvad.svg
                      :target: https://pypi.python.org/pypi/django-hvad

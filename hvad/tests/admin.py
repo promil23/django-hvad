@@ -82,6 +82,22 @@ class ModelHelpersTests(HvadTestCase, NormalFixture):
                 self.assertEqual(obj.lazy_translation_getter('translated_field'),
                                     NORMAL[1].translated_field['ja'])
 
+    def test_translation_getters_no_match(self):
+        obj = Normal.objects.untranslated().get(pk=self.normal_id[1])
+        with self.settings(LANGUAGE_CODE='tt',
+                           LANGUAGES=(('tt', 'Missing'),
+                                      ('sr', 'English'),
+                                      ('de', 'Japanese'))):
+            with translation.override('th'):
+                self.assertIn(obj.lazy_translation_getter('translated_field'),
+                              NORMAL[1].translated_field.values())
+
+    def test_translation_getters_no_translation(self):
+        Normal.objects.language('all').filter(pk=self.normal_id[1]).delete_translations()
+        obj = Normal.objects.untranslated().get(pk=self.normal_id[1])
+        with translation.override('en'):
+            self.assertEqual(obj.lazy_translation_getter('translated_field'), None)
+
 
 class AdminMethodsTests(HvadTestCase, BaseAdminTests, NormalFixture):
     normal_count = 1
@@ -162,10 +178,13 @@ class AdminMethodsTests(HvadTestCase, BaseAdminTests, NormalFixture):
         # Check what happens if there is no translations at all
         obj = Normal.objects.untranslated().create(shared_field="shared")
         with translation.override('en'):
-            self.assertEqual(myadmin.get_object(get_request, obj.pk).pk, obj.pk)
-            self.assertEqual(myadmin.get_object(get_request, obj.pk).shared_field, obj.shared_field)
-            self.assertEqual(myadmin.get_object(get_request, obj.pk).language_code, 'en')
-            self.assertEqual(myadmin.get_object(get_request, obj.pk).translated_field, '')
+            if django.VERSION >= (1, 9):
+                self.assertIs(myadmin.get_object(get_request, obj.pk), None)
+            else:
+                self.assertEqual(myadmin.get_object(get_request, obj.pk).pk, obj.pk)
+                self.assertEqual(myadmin.get_object(get_request, obj.pk).shared_field, obj.shared_field)
+                self.assertEqual(myadmin.get_object(get_request, obj.pk).language_code, 'en')
+                self.assertEqual(myadmin.get_object(get_request, obj.pk).translated_field, '')
 
     def test_get_object_nonexisting(self):
         # In case the object doesnt exist, it should return None
@@ -430,7 +449,6 @@ class NormalAdminTests(HvadTestCase, BaseAdminTests, UsersFixture, NormalFixture
                 self.assertEqual(obj.shared_field, SHARED)
                 self.assertEqual(obj.translated_field, TRANS)
 
-    @minimumDjangoVersion(1, 6)
     def test_admin_change_popup(self):
         from django.contrib.admin.options import IS_POPUP_VAR
         with translation.override('en'):
@@ -459,10 +477,7 @@ class AdminEditTests(HvadTestCase, BaseAdminTests, NormalFixture, UsersFixture):
         request = self.request_factory.get(url)
         normaladmin = self._get_admin(Normal)
         with translation.override('en'):
-            if django.VERSION >= (1, 6):
-                queryset = normaladmin.get_queryset(request)
-            else:
-                queryset = normaladmin.queryset(request)
+            queryset = normaladmin.get_queryset(request)
             self.assertEqual(queryset.count(), self.normal_count)
 
 

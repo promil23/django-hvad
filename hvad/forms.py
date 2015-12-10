@@ -8,7 +8,7 @@ from django.forms.models import (ModelForm, BaseModelForm, ModelFormMetaclass,
     modelform_factory, inlineformset_factory)
 if django.VERSION >= (1, 7):
     from django.forms.utils import ErrorList
-else:
+else: #pragma: no cover
     from django.forms.util import ErrorList
 from django.forms.widgets import Select
 from django.utils.translation import get_language, ugettext as _
@@ -35,7 +35,9 @@ class TranslatableModelFormMetaclass(ModelFormMetaclass):
         # Force presence of meta class, we need it
         meta = attrs.get('Meta')
         if meta is None:
-            meta = attrs['Meta'] = type('Meta', (object,), {})
+            # if a base class has a Meta, inherit it
+            base_meta = next(((base.Meta,) for base in bases if hasattr(base, 'Meta')), ())
+            meta = attrs['Meta'] = type('Meta', base_meta + (object,), {})
 
         model = getattr(meta, 'model', None)
         fields = getattr(meta, 'fields', None)
@@ -213,7 +215,7 @@ if django.VERSION >= (1, 7):
     class TranslatableModelForm(with_metaclass(TranslatableModelFormMetaclass,
                                                BaseTranslatableModelForm)):
         pass
-else:
+else: #pragma: no cover
     # Older django version have buggy metaclass
     class TranslatableModelForm(with_metaclass(TranslatableModelFormMetaclass,
                                                BaseTranslatableModelForm, ModelForm)):

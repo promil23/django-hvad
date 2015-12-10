@@ -9,6 +9,7 @@ from django.utils import translation
 from hvad.compat import with_metaclass
 from hvad.manager import TranslationQueryset, TranslationManager
 from hvad.models import TranslatableModel, TranslatedFields
+from hvad.utils import get_cached_translation
 from hvad.test_utils.data import NORMAL
 from hvad.test_utils.fixtures import NormalFixture
 from hvad.test_utils.testcase import HvadTestCase, minimumDjangoVersion
@@ -140,7 +141,6 @@ class DefinitionTests(HvadTestCase):
         self.assertEqual(state.options['unique_together'], {('language_code', 'master'),
                                                             ('tfield_a', 'tfield_b')})
 
-    @minimumDjangoVersion(1, 5)
     def test_index_together(self):
         class IndexTogetherModel(TranslatableModel):
             sfield_a = models.CharField(max_length=250)
@@ -213,6 +213,21 @@ class DefinitionTests(HvadTestCase):
         model = type('MyBaseModel', (TranslatableModel,), attrs)
         self.assertTrue(model._meta.abstract)
 
+    def test_custom_base_model(self):
+        class CustomTranslation(models.Model):
+            def test(self):
+                return 'foo'
+            class Meta:
+                abstract = True
+        class CustomBaseModel(TranslatableModel):
+            translations = TranslatedFields(
+                base_class=CustomTranslation,
+                tfield=models.CharField(max_length=250),
+            )
+        obj = CustomBaseModel(language_code='en')
+        self.assertTrue(issubclass(CustomBaseModel._meta.translations_model, CustomTranslation))
+        self.assertEqual(get_cached_translation(obj).test(), 'foo')
+
     def test_internal_properties(self):
         self.assertCountEqual(Normal()._translated_field_names,
                               ['id', 'master', 'master_id', 'language_code', 'translated_field'])
@@ -243,7 +258,6 @@ class QuerysetTest(HvadTestCase):
         with self.assertRaises(TypeError):
             TranslationQueryset(Standard)
 
-    @minimumDjangoVersion(1, 6)
     def test_fallbacks_semantics(self):
         from hvad.manager import FALLBACK_LANGUAGES
         qs = Normal.objects.language().fallbacks()
@@ -381,6 +395,50 @@ class CreateTest(HvadTestCase):
                 shared_field="shared",
                 translated_field='English',
             )
+
+
+class UpdateTest(HvadTestCase, NormalFixture):
+    normal_count = 2
+
+    def test_basic_update(self):
+        obj = Normal.objects.language('en').get(pk=self.normal_id[1])
+        obj.shared_field = 'update_shared'
+        obj.translated_field = 'update_translated'
+        with self.assertNumQueries(2):
+            obj.save()
+        obj = Normal.objects.language().get(pk=self.normal_id[1])
+        self.assertEqual(obj.shared_field, 'update_shared')
+        self.assertEqual(obj.translated_field, 'update_translated')
+
+    def test_force_update(self):
+        obj = Normal.objects.language('en').get(pk=self.normal_id[1])
+        obj.shared_field = 'update_shared'
+        obj.translated_field = 'update_translated'
+        with self.assertNumQueries(2):
+            obj.save(force_update=True)
+        obj = Normal.objects.language().get(pk=self.normal_id[1])
+        self.assertEqual(obj.shared_field, 'update_shared')
+        self.assertEqual(obj.translated_field, 'update_translated')
+
+    def test_update_fields_shared(self):
+        obj = Normal.objects.language('en').get(pk=self.normal_id[1])
+        obj.shared_field = 'update_shared'
+        obj.translated_field = 'update_translated'
+        with self.assertNumQueries(1):
+            obj.save(update_fields=['shared_field'])
+        obj = Normal.objects.language().get(pk=self.normal_id[1])
+        self.assertEqual(obj.shared_field, 'update_shared')
+        self.assertEqual(obj.translated_field, NORMAL[1].translated_field['en'])
+
+    def test_update_fields_translated(self):
+        obj = Normal.objects.language('en').get(pk=self.normal_id[1])
+        obj.shared_field = 'update_shared'
+        obj.translated_field = 'update_translated'
+        with self.assertNumQueries(1):
+            obj.save(update_fields=['translated_field'])
+        obj = Normal.objects.language().get(pk=self.normal_id[1])
+        self.assertEqual(obj.shared_field, NORMAL[1].shared_field)
+        self.assertEqual(obj.translated_field, 'update_translated')
 
 
 class DeleteTest(HvadTestCase, NormalFixture):
@@ -632,10 +690,10 @@ class GetOrCreateTest(HvadTestCase):
         with self.assertNumQueries(5 if connection.features.uses_savepoints else 3):
             """
             1: get
-            2a: savepoint (django >= 1.6)
+            2a: savepoint
             2b: create shared
             3a: create translation
-            3b: release savepoint (django >= 1.6)
+            3b: release savepoint
             """
             en, created = Normal.objects.language('en').get_or_create(
                 shared_field="shared",
@@ -654,10 +712,10 @@ class GetOrCreateTest(HvadTestCase):
         with self.assertNumQueries(5 if connection.features.uses_savepoints else 3):
             """
             1: get
-            2a: savepoint (django >= 1.6)
+            2a: savepoint
             2b: create shared
             3a: create translation
-            3b: release savepoint (django >= 1.6)
+            3b: release savepoint
             """
             ja, created = Normal.objects.language('ja').get_or_create(
                 shared_field="shared",

@@ -2,18 +2,65 @@
 Release Notes
 #############
 
+.. release 1.5.0
+
+*****************************
+1.5.0 - upcoming release
+*****************************
+
+New features:
+
+- It is now possible to specify a :ref:`custom translation base <custom-translation-models>`
+  model, allowing advanced translation manipulation, such as controlling their loading
+  with :meth:`~django.db.models.Model.from_db`.
+- Translated model's :meth:`~django.db.models.Model.save` method now accepts translated field
+  names in ``update_fields``. Also, if only translated fields, or only untranslated fields
+  are specified in ``update_fields``, the extra query will be skipped.
+
+Compatibility Warnings:
+
+- Saving of translations now happens in the model's :meth:`~django.db.models.Model.save` method.
+  It used to happen in the ``post_save`` signal.
+- ``TranslationsMixin`` now splits the update into ``update`` and ``update_translation`` methods.
+  The former is called once per save, and uses the latter as many times as required to update
+  all translations.
+
+Fixes:
+
+- REST framework translation support now uses ``update_fields`` to reduce the number of queries
+  when updating an object.
+
 .. release 1.4.0
 
 *****************************
-1.4.0 - upcoming release
+1.4.0 - current release
 *****************************
+
+Released on November 10, 2015
+
+Python and Django versions supported:
+
+- Support for Python 3.5 was added.
+- Support for Django 1.9 was added.
+- Django 1.6 is no longer officially supported.
+- Django 1.4 LTS has reached its end of life, and support will be dropped in hvad 1.5.
+- So, as a reminder, supported versions for this release are: 1.4 LTS, 1.7, 1.8 LTS, 1.9.
 
 Compatibility Warnings:
 
 - As a result of the annotations fix (see below), applications that worked around
   :meth:`~django.db.models.query.QuerySet.annotate`'s shortcomings on translation
-  querysets are likely to break, as ``annotate()`` has been fixes. The
+  querysets are likely to break, as ``annotate()`` has been fixed. The
   workarounds should be simply removed.
+- Method :meth:`FallbackQueryset.use_fallbacks() <hvad.manager.FallbackQueryset.use_fallbacks>`
+  is **not** supported on Django 1.9 and newer (and deprecated on other versions, see
+  below). Please use :ref:`TranslationQueryset.fallbacks() <fallbacks-public>` instead.
+- Translated admin no longer shows objects lacking a translation, starting from
+  Django 1.9. This behavior will be extended to all Django versions in the next release.
+  Such objects should not happen anyway, and throw a warning when encountered.
+- Translation model building has been refactored. It is functionally equivalent to its previous
+  implementation (it passes the exact same test suite), but code depending on the internals
+  and inner implementation details could break.
 
 Deprecation List:
 
@@ -42,13 +89,18 @@ Fixes:
   the translation cache with a ``master__`` prefix.
 - Specifying translation fields in ``unique_together`` on translatable models
   no longer causes Django to generate incorrect migrations. — :issue:`260`.
+- When no ``Meta`` options are set on a :ref:`TranslatableModelForm <translatablemodelform>`,
+  the auto-created one now correctly inherits that of its first base class that
+  has one set — :issue:`262`.
 - Using ``language('all')`` together with ``values()`` no longer breaks — :issue:`264`.
 
 .. release 1.3.0
 
 *****************************
-1.3.0 - current release
+1.3.0
 *****************************
+
+Released on July 29, 2015
 
 This release is a collection of fixes and improvements, some of which may
 introduce minor compatibility issues. Please make sure you fix any deprecation
