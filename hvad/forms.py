@@ -204,7 +204,8 @@ class BaseTranslatableModelForm(BaseModelForm):
         translation = construct_instance(self, translation,
                                          self._meta.fields, excludes)
         if getattr(self, 'is_edit', False):
-            translation.language_code = self.cleaned_data['language_code']
+            translation.language_code = \
+                self.cleaned_data.get('language_code', None) or self.new_lang
         set_cached_translation(self.instance, translation)
 
         # Delegate shared fields to super()
